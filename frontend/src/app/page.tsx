@@ -358,6 +358,19 @@ export default function Home() {
   const [histResults, setHistResults] = useState<{ date: string; tempMax: number; tempMin: number }[] | null>(null);
   const [histLoading, setHistLoading] = useState(false);
   const [histError, setHistError] = useState<string | null>(null);
+  const [recentHistQueries, setRecentHistQueries] = useState<any[]>([]);
+
+  const fetchRecentHistQueries = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/weather/history/recent`);
+      if (res.ok) {
+        const data = await res.json();
+        setRecentHistQueries(data);
+      }
+    } catch (err) {
+      console.warn("Could not fetch recent historical queries", err);
+    }
+  };
 
   // Places detail state
   const [selectedPlace, setSelectedPlace] = useState<{ name: string; image: string; desc: string } | null>(null);
@@ -376,6 +389,7 @@ export default function Home() {
   // Initialize and mount
   useEffect(() => {
     setIsMounted(true);
+    fetchRecentHistQueries();
     
     // Fetch trips from backend if available, otherwise load from localStorage
     const loadTrips = async () => {
@@ -611,6 +625,7 @@ export default function Home() {
       }
       const data = await res.json();
       setHistResults(data);
+      fetchRecentHistQueries();
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Failed to fetch historical weather data.";
       setHistError(errMsg);
@@ -779,8 +794,26 @@ export default function Home() {
     downloadAnchor.remove();
   };
 
-  const handlePrintPDF = () => {
-    window.print();
+  const handlePrintPDF = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/trips/export/pdf`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "weathermind_trips.pdf";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        window.print();
+      }
+    } catch (err) {
+      console.warn("Could not export PDF from backend, falling back to print", err);
+      window.print();
+    }
   };
 
   // Dynamic sky styles
@@ -1291,6 +1324,39 @@ export default function Home() {
                         Low: {r.tempMin}°
                       </div>
                     </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {recentHistQueries.length > 0 && (
+              <div className="mt-6 border-t border-card-line pt-6 animate-fade-in animate-duration-300">
+                <h4 className="font-display text-[0.88rem] font-semibold text-ink mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Stored Database Queries (Date Ranges)
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {recentHistQueries.map((q: any) => (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => {
+                        setHistCity(q.city);
+                        setHistStart(q.startDate);
+                        setHistEnd(q.endDate);
+                        setHistResults(q.results);
+                      }}
+                      className="text-left bg-white hover:bg-card-line/30 border border-card-line rounded-lg px-3 py-1.5 transition-all duration-200 group flex items-center gap-2 active:scale-95 shadow-sm hover:shadow"
+                    >
+                      <div>
+                        <div className="font-display text-[0.82rem] font-semibold text-ink group-hover:text-gold-deep transition-colors">
+                          {q.city}
+                        </div>
+                        <div className="font-body text-[0.68rem] text-slate">
+                          {q.startDate} to {q.endDate}
+                        </div>
+                      </div>
+                    </button>
                   ))}
                 </div>
               </div>
