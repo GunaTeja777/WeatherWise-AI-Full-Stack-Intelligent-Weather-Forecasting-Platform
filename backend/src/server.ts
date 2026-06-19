@@ -79,6 +79,36 @@ app.get('/api/weather', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// GET /api/weather/reverse (Reverse geocoding from lat/lon to city name)
+app.get('/api/weather/reverse', async (req: Request, res: Response): Promise<void> => {
+  const lat = req.query.lat as string;
+  const lon = req.query.lon as string;
+  const OWM_KEY = process.env.OPENWEATHER_API_KEY || process.env.OPENWEATHERMAP_API_KEY;
+
+  if (!lat || !lon) {
+    res.status(400).json({ error: 'Latitude and longitude are required' });
+    return;
+  }
+
+  if (!OWM_KEY) {
+    res.status(503).json({ error: 'OpenWeatherMap API Key missing on backend' });
+    return;
+  }
+
+  try {
+    const reverseGeoUrl = `http://api.openweathermap.org/geo/1.0/reverse?lat=${lat}&lon=${lon}&limit=1&appid=${OWM_KEY}`;
+    const response = await axios.get(reverseGeoUrl);
+    if (response.data && response.data.length > 0) {
+      res.json({ city: response.data[0].name });
+    } else {
+      res.status(404).json({ error: 'No city found for these coordinates' });
+    }
+  } catch (error: any) {
+    console.error('Error in /api/weather/reverse:', error.message);
+    res.status(500).json({ error: 'Failed to reverse geocode location' });
+  }
+});
+
 // GET /api/weather/history (Date range query)
 app.get('/api/weather/history', async (req: Request, res: Response): Promise<void> => {
   const city = req.query.city as string;

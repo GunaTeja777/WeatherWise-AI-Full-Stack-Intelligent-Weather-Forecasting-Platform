@@ -518,28 +518,65 @@ export default function Home() {
   // Trigger geolocation
   const handleGeolocation = () => {
     if ("geolocation" in navigator) {
+      setIsLoadingWeather(true);
+      setGlobalError(null);
+      
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lat = position.coords.latitude.toFixed(2);
-          const lon = position.coords.longitude.toFixed(2);
+        async (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
           
-          // Generate a custom location block based on latitude/longitude
+          // 1. Try free client-side BigDataCloud Reverse Geocoding first (no key required, robust)
+          try {
+            const clientGeoRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
+            if (clientGeoRes.ok) {
+              const clientGeoData = await clientGeoRes.json();
+              const cityName = clientGeoData.city || clientGeoData.locality || clientGeoData.principalSubdivision;
+              if (cityName) {
+                await handleSearchSubmit(cityName);
+                return;
+              }
+            }
+          } catch (err) {
+            console.warn("Client-side reverse geocode failed, trying backend endpoint", err);
+          }
+
+          // 2. Try backend OpenWeatherMap geocode endpoint as fallback
+          try {
+            const res = await fetch(`${BACKEND_URL}/api/weather/reverse?lat=${lat}&lon=${lon}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.city) {
+                await handleSearchSubmit(data.city);
+                return;
+              }
+            }
+          } catch (err) {
+            console.warn("Could not reverse geocode via backend, falling back to coordinate search", err);
+          }
+          
+          // 3. Last fallback: display coordinates
+          const latStr = lat.toFixed(2);
+          const lonStr = lon.toFixed(2);
           const locationData: CityData = {
-            ...generateCityData(`My Location (${lat}, ${lon})`),
-            city: "My Location",
-            country: `GPS (${lat}, ${lon})`,
+            ...generateCityData(`My Location (${latStr}, ${lonStr})`),
+            city: `Location (${latStr}, ${lonStr})`,
+            country: `GPS`,
             timeZone: "UTC",
             timeZoneLabel: "UTC"
           };
           setSelectedCity(locationData);
-          setSearchQuery("My Location");
+          setSearchQuery(`Location (${latStr}, ${lonStr})`);
+          setIsLoadingWeather(false);
         },
-        () => {
-          alert("Unable to retrieve your location. Utilizing Istanbul as fallback.");
+        (error) => {
+          console.warn("Geolocation permission/retrieval failed:", error.message);
+          setGlobalError("Unable to access your location. Please check your browser's location permissions.");
+          setIsLoadingWeather(false);
         }
       );
     } else {
-      alert("Geolocation is not supported by your browser.");
+      setGlobalError("Geolocation is not supported by your browser.");
     }
   };
 
@@ -965,10 +1002,18 @@ export default function Home() {
             </button>
             <button
               onClick={handleGeolocation}
-              className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-white/8 border border-white/16 text-paper-dim cursor-pointer flex items-center justify-center transition-all duration-200 hover:bg-white/15 hover:text-paper focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
+              disabled={isLoadingWeather}
+              className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-white/8 border border-white/16 text-paper-dim cursor-pointer flex items-center justify-center transition-all duration-200 hover:bg-white/15 hover:text-paper focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 disabled:opacity-50"
               aria-label="Use my current location"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              {isLoadingWeather ? (
+                <svg className="animate-spin h-3.5 w-3.5 text-paper" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              )}
             </button>
           </div>
 
@@ -998,8 +1043,15 @@ export default function Home() {
                   {selectedCity.temp}<sup className="text-[0.35em] font-light relative top-[-0.5em]">°</sup>
                 </div>
                 <div className="pb-[1.2rem]">
-                  <div className="font-display text-[1.5rem] font-medium text-paper mb-[0.3rem] print:text-ink">
-                    {selectedCity.city}, {selectedCity.country}
+                  <div className="font-display text-[1.5rem] font-medium text-paper mb-[0.3rem] print:text-ink flex items-center gap-2">
+                    <span>
+                      {selectedCity.skyType === "clear" && "☀️"}
+                      {selectedCity.skyType === "haze" && "🌫️"}
+                      {selectedCity.skyType === "overcast" && "☁️"}
+                      {selectedCity.skyType === "rain" && "🌧️"}
+                      {selectedCity.skyType === "heavy-rain" && "⛈️"}
+                    </span>
+                    <span>{selectedCity.city}, {selectedCity.country}</span>
                   </div>
                   <div className="font-body text-[0.85rem] text-paper-dim print:text-slate">
                     Feels like {selectedCity.feelsLike}° · H:{selectedCity.high}° L:{selectedCity.low}°
