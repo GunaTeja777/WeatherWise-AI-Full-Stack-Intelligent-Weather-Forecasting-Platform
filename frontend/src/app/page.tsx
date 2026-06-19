@@ -534,25 +534,32 @@ export default function Home() {
     if (!cityName) return;
     const key = cityName.toLowerCase().trim();
     setGlobalError(null);
-    
-    // Check if it is a local pre-configured city
-    if (CITIES_DB[key]) {
-      setSelectedCity(CITIES_DB[key]);
-      setSearchQuery(CITIES_DB[key].city);
-      setShowSuggestions(false);
-      return;
-    }
-
     setIsLoadingWeather(true);
+    
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const startTime = Date.now();
+
     try {
+      // Check if it is a local pre-configured city
+      if (CITIES_DB[key]) {
+        setSelectedCity(CITIES_DB[key]);
+        setSearchQuery(CITIES_DB[key].city);
+        setShowSuggestions(false);
+        
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 500) {
+          await delay(500 - elapsed);
+        }
+        setIsLoadingWeather(false);
+        return;
+      }
+
       const res = await fetch(`${BACKEND_URL}/api/weather?city=${encodeURIComponent(cityName)}`);
       if (res.ok) {
         const data = await res.json();
         setSelectedCity(data);
         setSearchQuery(data.city);
         setShowSuggestions(false);
-        setIsLoadingWeather(false);
-        return;
       } else {
         const errData = await res.json();
         throw new Error(errData.error || `City "${cityName}" not found.`);
@@ -561,8 +568,13 @@ export default function Home() {
       console.error("Weather fetch failed:", err);
       const errMsg = err instanceof Error ? err.message : `Failed to fetch weather for "${cityName}".`;
       setGlobalError(errMsg);
-      setIsLoadingWeather(false);
       setShowSuggestions(false);
+    } finally {
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 500) {
+        await delay(500 - elapsed);
+      }
+      setIsLoadingWeather(false);
     }
   };
 
@@ -906,10 +918,17 @@ export default function Home() {
             </div>
             <button
               onClick={() => handleSearchSubmit(searchQuery)}
-              className="flex-shrink-0 px-5 py-[0.7rem] rounded-full bg-gold hover:bg-amber-400 text-ink font-semibold text-[0.88rem] cursor-pointer transition-all duration-200 focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
+              disabled={isLoadingWeather}
+              className="flex-shrink-0 px-5 py-[0.7rem] rounded-full bg-gold hover:bg-amber-400 disabled:bg-gold/50 disabled:cursor-not-allowed text-ink font-semibold text-[0.88rem] cursor-pointer transition-all duration-200 focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 flex items-center gap-1.5"
               aria-label="Submit Search"
             >
-              Search
+              {isLoadingWeather && (
+                <svg className="animate-spin h-3.5 w-3.5 text-ink" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              )}
+              {isLoadingWeather ? "Searching..." : "Search"}
             </button>
             <button
               onClick={handleGeolocation}
