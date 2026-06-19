@@ -392,15 +392,43 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
     let places = PLACE_TEMPLATES[normKey] || PLACE_TEMPLATES[cityName.toLowerCase()] || DEFAULT_PLACES;
 
     if (aiData.places && Array.isArray(aiData.places) && aiData.places.length > 0) {
-      places = aiData.places.map((p: any) => {
-        const cat = (p.category || 'city').toLowerCase().trim();
-        const imgUrl = CATEGORY_IMAGES[cat] || CATEGORY_IMAGES.city;
-        return {
-          name: p.name || 'Local Attraction',
-          image: imgUrl,
-          desc: p.desc || 'A scenic local destination worth visiting.'
-        };
-      });
+      try {
+        places = await Promise.all(
+          aiData.places.map(async (p: any) => {
+            const attractionName = p.name || 'Local Attraction';
+            let imgUrl = '';
+            
+            // Try fetching from Wikipedia API
+            try {
+              const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(attractionName)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
+              const wikiRes = await axios.get(wikiUrl);
+              const pages = wikiRes.data?.query?.pages;
+              if (pages) {
+                const pageId = Object.keys(pages)[0];
+                if (pageId && pages[pageId]?.thumbnail?.source) {
+                  imgUrl = pages[pageId].thumbnail.source;
+                }
+              }
+            } catch (err: any) {
+              console.warn(`[Wikipedia Image API] Failed for "${attractionName}":`, err.message);
+            }
+
+            // Fallback to generic category-based Unsplash photo if Wikipedia is unavailable or missing image
+            if (!imgUrl) {
+              const cat = (p.category || 'city').toLowerCase().trim();
+              imgUrl = CATEGORY_IMAGES[cat] || CATEGORY_IMAGES.city;
+            }
+
+            return {
+              name: attractionName,
+              image: imgUrl,
+              desc: p.desc || 'A scenic local destination worth visiting.'
+            };
+          })
+        );
+      } catch (err: any) {
+        console.error('[Places Image Resolution] Error mapping place data:', err.message);
+      }
     }
 
     return {

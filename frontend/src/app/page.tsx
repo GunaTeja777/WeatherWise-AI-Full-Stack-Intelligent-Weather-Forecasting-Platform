@@ -362,6 +362,10 @@ export default function Home() {
   // Places detail state
   const [selectedPlace, setSelectedPlace] = useState<{ name: string; image: string; desc: string } | null>(null);
 
+  // YouTube videos state
+  const [ytVideos, setYtVideos] = useState<{ title: string; videoId: string; thumbnail: string }[]>([]);
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
+
   // Rain animation states
   const [heroRainDrops, setHeroRainDrops] = useState<RainDrop[]>([]);
   const [miniRainDrops1, setMiniRainDrops1] = useState<RainDrop[]>([]);
@@ -414,6 +418,23 @@ export default function Home() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Fetch YouTube travel guides for the selected city
+  useEffect(() => {
+    if (!selectedCity?.city) return;
+    const fetchYt = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/youtube?query=${encodeURIComponent(selectedCity.city)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setYtVideos(data);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch YouTube videos", err);
+      }
+    };
+    fetchYt();
+  }, [selectedCity.city]);
 
   // Update clock timezone-aware
   useEffect(() => {
@@ -1090,31 +1111,86 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="bg-card border border-card-line rounded-[18px] p-[1.4rem_1.5rem] col-span-2 max-md:col-span-1 print:hidden">
-              <div className="font-body text-[0.78rem] font-semibold uppercase tracking-[0.06em] text-slate mb-[0.7rem]">Worth your time nearby</div>
-              <div className="flex gap-[0.6rem] mt-[0.9rem]" role="list" aria-label={`Places to visit in ${selectedCity.city}`}>
-                {selectedCity.places.map((place, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setSelectedPlace(place)}
-                    className="flex-1 aspect-[4/3] rounded-[12px] relative overflow-hidden cursor-pointer border-none p-0 group focus-visible:outline-2 focus-visible:outline-gold-deep focus-visible:outline-offset-2"
-                    role="listitem"
-                    aria-label={place.name}
-                  >
-                    <Image
-                      src={place.image}
-                      alt={place.name}
-                      fill
-                      sizes="(max-width: 768px) 33vw, 120px"
-                      className="w-full h-full object-cover block transition-transform duration-400 ease-out group-hover:scale-106"
-                    />
-                    <span className="absolute bottom-0 left-0 right-0 p-[0.5rem_0.6rem_0.4rem] bg-gradient-to-t from-black/65 to-transparent font-body text-[0.72rem] font-semibold text-white text-left">
-                      {place.name}
-                    </span>
-                  </button>
-                ))}
+            {/* Worth your time nearby */}
+            <div className="bg-card border border-card-line rounded-[18px] p-[1.4rem_1.5rem] flex flex-col justify-between max-md:col-span-1">
+              <div>
+                <div className="font-body text-[0.78rem] font-semibold uppercase tracking-[0.06em] text-slate mb-[0.7rem]">Worth your time nearby</div>
+                <div className="grid grid-cols-3 gap-[0.5rem] mt-[0.9rem]" role="list" aria-label={`Places to visit in ${selectedCity.city}`}>
+                  {selectedCity.places.slice(0, 3).map((place, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setSelectedPlace(place)}
+                      className="aspect-[4/3] rounded-[12px] relative overflow-hidden cursor-pointer border-none p-0 group focus-visible:outline-2 focus-visible:outline-gold-deep focus-visible:outline-offset-2"
+                      role="listitem"
+                      aria-label={place.name}
+                    >
+                      <Image
+                        src={place.image}
+                        alt={place.name}
+                        fill
+                        sizes="(max-width: 768px) 33vw, 120px"
+                        className="w-full h-full object-cover block transition-transform duration-450 ease-out group-hover:scale-106"
+                      />
+                      <span className="absolute bottom-0 left-0 right-0 p-[0.4rem_0.5rem_0.3rem] bg-gradient-to-t from-black/75 to-transparent font-body text-[0.68rem] font-semibold text-white text-left leading-tight">
+                        {place.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
+
+            {/* Google Map Card */}
+            <div className="bg-card border border-card-line rounded-[18px] p-[1.4rem_1.5rem] flex flex-col justify-between max-md:col-span-1">
+              <div>
+                <div className="font-body text-[0.78rem] font-semibold uppercase tracking-[0.06em] text-slate mb-[0.7rem]">Interactive Map</div>
+                <div className="rounded-[12px] overflow-hidden border border-card-line bg-[#E5E3DF] relative h-[105px] w-full">
+                  <iframe
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    allowFullScreen
+                    src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedCity.city + ", " + selectedCity.country)}&t=&z=11&ie=UTF8&iwloc=&output=embed`}
+                    className="absolute inset-0 w-full h-full block"
+                  ></iframe>
+                </div>
+              </div>
+            </div>
+
+            {/* YouTube Travel Videos Card */}
+            {ytVideos.length > 0 && (
+              <div className="bg-card border border-card-line rounded-[18px] p-[1.4rem_1.5rem] col-span-2 max-md:col-span-1 print:hidden">
+                <div className="font-body text-[0.78rem] font-semibold uppercase tracking-[0.06em] text-slate mb-[0.7rem]">
+                  Local Travel Guides &amp; Videos
+                </div>
+                <div className="grid grid-cols-3 gap-4 mt-3 max-sm:grid-cols-1">
+                  {ytVideos.map((video, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveVideoId(video.videoId)}
+                      className="text-left bg-black/5 hover:bg-black/10 border border-card-line/50 hover:border-ink/20 rounded-[12px] p-2.5 cursor-pointer transition-all duration-200 flex flex-col justify-between h-full group"
+                    >
+                      <div className="aspect-video w-full rounded-lg overflow-hidden relative mb-2 bg-slate/10">
+                        <Image
+                          src={video.thumbnail}
+                          alt={video.title}
+                          fill
+                          sizes="(max-width: 768px) 100vw, 300px"
+                          className="w-full h-full object-cover transition-transform duration-350 ease-out group-hover:scale-104"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/35 transition-colors">
+                          <div className="w-9 h-9 rounded-full bg-white/90 text-red-600 flex items-center justify-center shadow-lg transition-transform duration-200 group-hover:scale-110">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="ml-0.5"><path d="M8 5v14l11-7z"/></svg>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="font-body text-[0.78rem] font-medium text-ink line-clamp-2 leading-snug group-hover:text-gold-deep transition-colors" dangerouslySetInnerHTML={{ __html: video.title }}></div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
@@ -1369,6 +1445,36 @@ export default function Home() {
             <div className="p-6">
               <h3 className="font-display text-[1.4rem] font-semibold text-ink mb-2">{selectedPlace.name}</h3>
               <p className="font-body text-[0.9rem] text-slate leading-relaxed">{selectedPlace.desc}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* YOUTUBE VIDEO PLAYER MODAL */}
+      {activeVideoId && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden animate-fade-in" onClick={() => setActiveVideoId(null)}>
+          <div 
+            className="bg-[#1A1F26] border border-white/10 rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => setActiveVideoId(null)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 hover:bg-black/75 text-white flex items-center justify-center transition-colors border-none cursor-pointer z-10"
+              aria-label="Close video player"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <div className="aspect-video w-full">
+              <iframe
+                width="100%"
+                height="100%"
+                src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1`}
+                title="YouTube video player"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="w-full h-full block border-none"
+              ></iframe>
             </div>
           </div>
         </div>
