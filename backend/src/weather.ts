@@ -168,8 +168,7 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
     const geoResponse = await axios.get(geoUrl);
     
     if (!geoResponse.data || geoResponse.data.length === 0) {
-      console.warn(`[Weather] City not found in OWM: ${cityName}. Falling back.`);
-      return generateFallbackCityData(cityName);
+      throw new Error(`City "${cityName}" not found.`);
     }
 
     const { name, lat, lon, country } = geoResponse.data[0];
@@ -430,3 +429,41 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
     return generateFallbackCityData(cityName);
   }
 }
+
+// Fetch historical weather records for a location and date range
+export async function getHistoricalWeatherData(
+  cityName: string,
+  startDate: string,
+  endDate: string
+): Promise<{ date: string; tempMax: number; tempMin: number }[]> {
+  const OWM_KEY = process.env.OPENWEATHERMAP_API_KEY;
+  if (!OWM_KEY) {
+    throw new Error("OpenWeatherMap API Key is required for historical weather queries.");
+  }
+
+  // 1. Resolve city to lat/lon
+  const geoUrl = `http://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(cityName)}&limit=1&appid=${OWM_KEY}`;
+  const geoResponse = await axios.get(geoUrl);
+  if (!geoResponse.data || geoResponse.data.length === 0) {
+    throw new Error(`City "${cityName}" not found.`);
+  }
+
+  const { lat, lon } = geoResponse.data[0];
+
+  // 2. Fetch from Open-Meteo Archive API
+  const archiveUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
+  const response = await axios.get(archiveUrl);
+
+  if (!response.data || !response.data.daily) {
+    throw new Error("Failed to retrieve historical weather for the specified date range.");
+  }
+
+  const { time, temperature_2m_max, temperature_2m_min } = response.data.daily;
+  
+  return time.map((t: string, idx: number) => ({
+    date: t,
+    tempMax: Math.round(temperature_2m_max[idx]),
+    tempMin: Math.round(temperature_2m_min[idx])
+  }));
+}
+

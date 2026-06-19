@@ -341,6 +341,7 @@ export default function Home() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [localTime, setLocalTime] = useState("—");
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
+  const [globalError, setGlobalError] = useState<string | null>(null);
   
   // Trip management state
   const [trips, setTrips] = useState<typeof DEFAULT_TRIPS>([]);
@@ -349,6 +350,14 @@ export default function Home() {
   const [modalStart, setModalStart] = useState("");
   const [modalEnd, setModalEnd] = useState("");
   const [editingTripId, setEditingTripId] = useState<string | null>(null);
+
+  // Historical query state
+  const [histCity, setHistCity] = useState("");
+  const [histStart, setHistStart] = useState("");
+  const [histEnd, setHistEnd] = useState("");
+  const [histResults, setHistResults] = useState<{ date: string; tempMax: number; tempMin: number }[] | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
+  const [histError, setHistError] = useState<string | null>(null);
 
   // Places detail state
   const [selectedPlace, setSelectedPlace] = useState<{ name: string; image: string; desc: string } | null>(null);
@@ -503,6 +512,7 @@ export default function Home() {
   const handleSearchSubmit = async (cityName: string) => {
     if (!cityName) return;
     const key = cityName.toLowerCase().trim();
+    setGlobalError(null);
     
     // Check if it is a local pre-configured city
     if (CITIES_DB[key]) {
@@ -522,17 +532,58 @@ export default function Home() {
         setShowSuggestions(false);
         setIsLoadingWeather(false);
         return;
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.error || `City "${cityName}" not found.`);
       }
     } catch (err) {
-      console.warn("Backend weather fetch failed, using frontend local generator.", err);
+      console.error("Weather fetch failed:", err);
+      const errMsg = err instanceof Error ? err.message : `Failed to fetch weather for "${cityName}".`;
+      setGlobalError(errMsg);
+      setIsLoadingWeather(false);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleHistoricalQuery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!histCity || !histStart || !histEnd) {
+      setHistError("Please provide city, start date, and end date.");
+      return;
     }
 
-    // Fallback: Generate realistic custom weather on the fly
-    const generated = generateCityData(cityName);
-    setSelectedCity(generated);
-    setSearchQuery(generated.city);
-    setShowSuggestions(false);
-    setIsLoadingWeather(false);
+    const start = new Date(histStart);
+    const end = new Date(histEnd);
+    const today = new Date();
+
+    if (start > end) {
+      setHistError("Start Date must be before or equal to End Date.");
+      return;
+    }
+    if (end > today) {
+      setHistError("End Date cannot be in the future for historical lookup.");
+      return;
+    }
+
+    setHistLoading(true);
+    setHistError(null);
+    setHistResults(null);
+
+    try {
+      const url = `${BACKEND_URL}/api/weather/history?city=${encodeURIComponent(histCity)}&startDate=${histStart}&endDate=${histEnd}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || `City "${histCity}" not found or date range invalid.`);
+      }
+      const data = await res.json();
+      setHistResults(data);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Failed to fetch historical weather data.";
+      setHistError(errMsg);
+    } finally {
+      setHistLoading(false);
+    }
   };
 
   // Search input events
@@ -721,7 +772,7 @@ export default function Home() {
       <nav className="absolute top-0 left-0 right-0 z-40 px-8 py-6 flex items-center justify-between pointer-events-auto print:hidden">
         <a href="#" className="font-display text-[1.1rem] font-medium text-paper tracking-[0.01em] no-underline flex items-center gap-2">
           <span className="w-[6px] h-[6px] rounded-full bg-gold inline-block" aria-hidden="true"></span>
-          WeatherMind
+          WeatherMind <span className="text-[0.78rem] text-paper-dim font-light">by Guna Teja</span>
         </a>
         <a href="#trips" className="font-body text-[0.85rem] font-medium text-paper-dim no-underline px-[0.9rem] py-[0.45rem] rounded-full transition-all duration-200 border border-paper/18 hover:text-paper hover:border-paper/40 focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2">
           My Trips
@@ -785,15 +836,16 @@ export default function Home() {
 
         {/* HERO CONTENT */}
         <div className="relative z-10 flex-1 flex flex-col justify-end px-8 pb-10 max-w-[1180px] mx-auto w-full print:p-0">
-          <div className="flex items-center gap-[0.85rem] mb-[2.25rem] max-w-[420px] w-full relative z-30 print:hidden" ref={searchContainerRef}>
-            <span className="flex-shrink-0 text-paper-faint" aria-hidden="true">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-            </span>
+          {/* Helper label explaining custom search capability */}
+          <div className="mb-2 text-[0.82rem] text-gold/80 font-medium tracking-[0.01em] print:hidden">
+            Enter any global city to fetch real-time weather &amp; local attractions
+          </div>
+          <div className="flex items-center gap-[0.65rem] mb-[2rem] max-w-[500px] w-full relative z-30 print:hidden" ref={searchContainerRef}>
             <div className="relative flex-1">
               <input
                 type="text"
                 className="bg-white/8 border border-white/16 rounded-full text-paper font-body text-[0.92rem] px-[1.3rem] py-[0.7rem] w-full outline-none backdrop-blur-[6px] transition-all duration-200 placeholder:text-paper-faint focus:border-gold/60 focus:bg-white/12 disabled:opacity-50"
-                placeholder={isLoadingWeather ? "AI Intelligence loading..." : "Search a city, zip, or landmark"}
+                placeholder={isLoadingWeather ? "AI Intelligence loading..." : "Search e.g. London, Kakinada, Tokyo..."}
                 aria-label="Search for a location"
                 value={searchQuery}
                 onChange={(e) => {
@@ -832,6 +884,13 @@ export default function Home() {
               )}
             </div>
             <button
+              onClick={() => handleSearchSubmit(searchQuery)}
+              className="flex-shrink-0 px-5 py-[0.7rem] rounded-full bg-gold hover:bg-amber-400 text-ink font-semibold text-[0.88rem] cursor-pointer transition-all duration-200 focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
+              aria-label="Submit Search"
+            >
+              Search
+            </button>
+            <button
               onClick={handleGeolocation}
               className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-white/8 border border-white/16 text-paper-dim cursor-pointer flex items-center justify-center transition-all duration-200 hover:bg-white/15 hover:text-paper focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
               aria-label="Use my current location"
@@ -839,6 +898,14 @@ export default function Home() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
             </button>
           </div>
+
+          {/* Global Error Banner */}
+          {globalError && (
+            <div className="bg-red-500/20 border border-red-500/40 rounded-xl p-3 mb-4 max-w-[500px] backdrop-blur-[4px] text-red-200 text-[0.85rem] flex items-center gap-2 print:hidden animate-fade-in">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="flex-shrink-0 text-red-300"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>{globalError}</span>
+            </div>
+          )}
 
           {isLoadingWeather ? (
             <div className="py-12 flex flex-col items-start justify-center gap-4 animate-pulse">
@@ -1053,6 +1120,91 @@ export default function Home() {
 
         <hr className="border-none border-t border-card-line mb-14" />
 
+        {/* HISTORICAL WEATHER VAULT */}
+        <section aria-labelledby="history-vault-heading" className="mb-14">
+          <div className="flex items-baseline justify-between mb-6 flex-wrap gap-2">
+            <h2 className="font-display text-[1.4rem] font-medium text-ink" id="history-vault-heading">
+              Historical Weather Vault
+            </h2>
+            <span className="font-body text-[0.82rem] text-slate">Analyze historical temperature ranges</span>
+          </div>
+
+          <div className="bg-card border border-card-line rounded-[18px] p-6">
+            <form onSubmit={handleHistoricalQuery} className="grid grid-cols-4 gap-4 items-end max-md:grid-cols-1">
+              <div>
+                <label className="block text-[0.75rem] font-semibold uppercase tracking-wider text-slate mb-1">City</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Kakinada, Tokyo"
+                  value={histCity}
+                  onChange={(e) => setHistCity(e.target.value)}
+                  className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[0.75rem] font-semibold uppercase tracking-wider text-slate mb-1">Start Date</label>
+                <input
+                  type="date"
+                  required
+                  value={histStart}
+                  onChange={(e) => setHistStart(e.target.value)}
+                  className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[0.75rem] font-semibold uppercase tracking-wider text-slate mb-1">End Date</label>
+                <input
+                  type="date"
+                  required
+                  value={histEnd}
+                  onChange={(e) => setHistEnd(e.target.value)}
+                  className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all"
+                />
+              </div>
+              <div>
+                <button
+                  type="submit"
+                  disabled={histLoading}
+                  className="w-full py-[0.6rem] bg-ink text-paper hover:bg-[#2B333D] rounded-lg font-semibold text-[0.88rem] transition-colors disabled:opacity-50"
+                >
+                  {histLoading ? "Querying..." : "Compare Range"}
+                </button>
+              </div>
+            </form>
+
+            {histError && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-700 text-[0.85rem] rounded-lg flex items-center gap-2 animate-fade-in">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-red-600"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>{histError}</span>
+              </div>
+            )}
+
+            {histResults && (
+              <div className="mt-6 border-t border-card-line pt-6 animate-fade-in">
+                <h4 className="font-display text-[1.1rem] font-medium text-ink mb-4">Daily Temperatures for {histCity}</h4>
+                <div className="grid grid-cols-7 gap-3 max-md:grid-cols-2 max-sm:grid-cols-1">
+                  {histResults.map((r, idx) => (
+                    <div key={idx} className="bg-card-line/30 border border-card-line/50 p-3 rounded-xl text-center">
+                      <div className="font-body text-[0.75rem] font-semibold text-slate uppercase">
+                        {new Date(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </div>
+                      <div className="mt-2 font-display text-[1.2rem] font-semibold text-ink">
+                        {r.tempMax}°
+                      </div>
+                      <div className="font-body text-[0.75rem] text-slate">
+                        Low: {r.tempMin}°
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <hr className="border-none border-t border-card-line mb-14" />
+
         {/* TRIPS */}
         <section id="trips" aria-labelledby="trips-heading" className="print:mt-8">
           <div className="flex items-baseline justify-between mb-6 flex-wrap gap-2">
@@ -1083,22 +1235,22 @@ export default function Home() {
                   <span className="font-body text-[0.78rem] font-semibold text-gold-deep bg-gold/14 px-[0.65rem] py-[0.3rem] rounded-full whitespace-nowrap flex-shrink-0 max-sm:order-3 max-sm:ml-[62px]">
                     {trip.tempSnapshot} · {trip.info}
                   </span>
-                  <div className="flex gap-[0.2rem] flex-shrink-0 print:hidden">
+                  <div className="flex gap-2 flex-shrink-0 print:hidden">
                     <button
                       onClick={() => handleOpenEditModal(trip.id)}
-                      className="w-8 h-8 rounded-full border-none bg-transparent text-slate cursor-pointer flex items-center justify-center transition-all duration-200 hover:bg-ink/6 hover:text-ink focus-visible:outline-2 focus-visible:outline-gold-deep focus-visible:outline-offset-2"
+                      className="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[0.78rem] font-semibold cursor-pointer flex items-center gap-1 transition-all duration-200 hover:bg-blue-100 hover:text-blue-800"
                       aria-label={`Edit ${trip.city} trip`}
-                      title="Edit"
                     >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      Edit
                     </button>
                     <button
                       onClick={() => handleDeleteTrip(trip.id)}
-                      className="w-8 h-8 rounded-full border-none bg-transparent text-slate cursor-pointer flex items-center justify-center transition-all duration-200 hover:bg-ink/6 hover:text-ink focus-visible:outline-2 focus-visible:outline-gold-deep focus-visible:outline-offset-2 hover:text-[#C0473C] hover:bg-[#C0473C]/8"
+                      className="px-3 py-1.5 rounded-full border border-red-200 bg-red-50 text-red-600 text-[0.78rem] font-semibold cursor-pointer flex items-center gap-1 transition-all duration-200 hover:bg-red-100 hover:text-red-700"
                       aria-label={`Delete ${trip.city} trip`}
-                      title="Delete"
                     >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -1122,7 +1274,7 @@ export default function Home() {
       <footer className="px-8 py-12 border-t border-card-line print:border-none print:mt-12 print:pt-4">
         <div className="max-w-[1180px] mx-auto">
           <p className="font-body text-[0.82rem] text-slate leading-relaxed max-w-[520px]">
-            Built as part of the PM Accelerator AI Engineer Intern technical assessment. WeatherMind is a travel weather companion that pairs real conditions with trip-aware packing and timing notes for places you&apos;re actually going.
+            Designed &amp; Developed by <strong className="font-semibold text-ink">Guna Teja</strong>. Built as part of the PM Accelerator AI Engineer Intern technical assessment. WeatherMind is a travel weather companion that pairs real conditions with trip-aware packing and timing notes for places you&apos;re actually going.
           </p>
           <p className="font-display text-[0.85rem] text-ink/35 mt-6 italic print:text-slate">Clear skies ahead.</p>
         </div>

@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import { initRedis, getCache, setCache } from './redis';
-import { getWeatherData } from './weather';
+import { getWeatherData, getHistoricalWeatherData } from './weather';
 import axios from 'axios';
 
 // Load environment variables
@@ -53,7 +53,59 @@ app.get('/api/weather', async (req: Request, res: Response): Promise<void> => {
     res.json(weatherData);
   } catch (error: any) {
     console.error(`Error in /api/weather:`, error.message);
-    res.status(500).json({ error: 'Failed to fetch weather information' });
+    const status = error.message.includes('not found') ? 404 : 500;
+    res.status(status).json({ error: error.message || 'Failed to fetch weather information' });
+  }
+});
+
+// GET /api/weather/history (Date range query)
+app.get('/api/weather/history', async (req: Request, res: Response): Promise<void> => {
+  const city = req.query.city as string;
+  const startDate = req.query.startDate as string;
+  const endDate = req.query.endDate as string;
+
+  if (!city || !startDate || !endDate) {
+    res.status(400).json({ error: 'City, startDate, and endDate query parameters are required' });
+    return;
+  }
+
+  // Basic validation
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const today = new Date();
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    res.status(400).json({ error: 'Invalid date formats. Use YYYY-MM-DD' });
+    return;
+  }
+
+  if (start > end) {
+    res.status(400).json({ error: 'Start date must be before or equal to End date' });
+    return;
+  }
+
+  if (end > today) {
+    res.status(400).json({ error: 'End date cannot be in the future for historical queries' });
+    return;
+  }
+
+  const cacheKey = `history:${city.toLowerCase().trim()}:${startDate}:${endDate}`;
+
+  try {
+    // Check cache
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      res.json(cachedData);
+      return;
+    }
+
+    const data = await getHistoricalWeatherData(city, startDate, endDate);
+    await setCache(cacheKey, data, 86400); // Cache historical data for 1 day
+    res.json(data);
+  } catch (error: any) {
+    console.error(`Error in /api/weather/history:`, error.message);
+    const status = error.message.includes('not found') ? 404 : 500;
+    res.status(status).json({ error: error.message || 'Failed to fetch historical weather' });
   }
 });
 
@@ -113,16 +165,19 @@ app.put('/api/trips/:id', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  const { dates } = req.body;
-  if (!dates) {
-    res.status(400).json({ error: 'Dates field is required for update' });
-    return;
-  }
+  const { city, country, dates, tempSnapshot, info, gradient } = req.body;
 
   try {
     const updatedTrip = await prisma.trip.update({
       where: { id },
-      data: { dates }
+      data: {
+        ...(city && { city }),
+        ...(country && { country }),
+        ...(dates && { dates }),
+        ...(tempSnapshot && { tempSnapshot }),
+        ...(info && { info }),
+        ...(gradient && { gradient })
+      }
     });
     res.json({
       ...updatedTrip,
