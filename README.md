@@ -83,4 +83,4 @@ docker-compose up -d
 ---
 
 ## 📄 License & Credits
-Developed by Google Deepmind team members and GunaTeja777. Designed as an intelligent full-stack meteorological forecasting tool for modern global travelers.
+Developed by Guna Teja. Designed as an intelligent full-stack meteorological forecasting tool for modern global travelers.
