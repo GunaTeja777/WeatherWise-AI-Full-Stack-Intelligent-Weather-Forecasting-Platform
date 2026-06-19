@@ -1,0 +1,19 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Trip {
+  id           Int      @id @default(autoincrement())
+  city         String
+  country      String
+  dates        String
+  gradient     String
+  tempSnapshot String
+  info         String
+  createdAt    DateTime @default(now())
+}

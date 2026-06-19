@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #F6F4EF;
+  --color-paper-dim: rgba(246, 244, 239, 0.68);
+  --color-paper-faint: rgba(246, 244, 239, 0.42);
+  --color-gold: #E8B86D;
+  --color-gold-deep: #C98C4A;
+  --color-ink: #13181F;
+  --color-card: #FBFAF7;
+  --color-card-line: rgba(19, 24, 31, 0.09);
+  --color-slate: #5B6878;
+
+  --font-display: var(--font-fraunces), serif;
+  --font-body: var(--font-inter), sans-serif;
+
+  --animate-sun-breathe: sun-breathe 6s ease-in-out infinite;
+  --animate-drift-1: drift-1 70s linear infinite;
+  --animate-drift-2: drift-2 95s linear infinite;
+  --animate-drift-3: drift-3 60s linear infinite;
+  --animate-drift-4: drift-4 110s linear infinite;
+  --animate-fall: fall linear infinite;
+
+  @keyframes sun-breathe {
+    0%, 100% {
+      box-shadow: 0 0 90px 30px rgba(232, 184, 109, 0.35), 0 0 30px 8px rgba(255, 231, 184, 0.5);
+    }
+    50% {
+      box-shadow: 0 0 110px 40px rgba(232, 184, 109, 0.45), 0 0 36px 10px rgba(255, 231, 184, 0.6);
+    }
+  }
+
+  @keyframes drift-1 {
+    from { transform: translateX(-12%); }
+    to { transform: translateX(112%); }
+  }
+
+  @keyframes drift-2 {
+    from { transform: translateX(-15%); }
+    to { transform: translateX(115%); }
+  }
+
+  @keyframes drift-3 {
+    from { transform: translateX(-10%); }
+    to { transform: translateX(110%); }
+  }
+
+  @keyframes drift-4 {
+    from { transform: translateX(-18%); }
+    to { transform: translateX(118%); }
+  }
+
+  @keyframes fall {
+    from { transform: translateY(0); }
+    to { transform: translateY(115vh); }
+  }
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* Custom Rain Drop elements styles */
+.drop {
+  position: absolute;
+  width: 1.5px;
+  background: linear-gradient(180deg, rgba(190, 210, 230, 0), rgba(190, 210, 230, 0.55));
+  top: -5%;
+}
+
+.mini-drop {
+  position: absolute;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.4);
+  top: -10%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
