@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { initRedis, getCache, setCache } from './redis';
 import { getWeatherData, getHistoricalWeatherData } from './weather';
 import axios from 'axios';
+import PDFDocument from 'pdfkit';
 
 // Load environment variables
 dotenv.config();
@@ -12,6 +13,26 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 const prisma = new PrismaClient();
+
+// Create HistoricalQuery table if not exists in PostgreSQL
+async function setupDatabase() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "HistoricalQuery" (
+        "id" SERIAL PRIMARY KEY,
+        "city" VARCHAR(255) NOT NULL,
+        "startDate" VARCHAR(255) NOT NULL,
+        "endDate" VARCHAR(255) NOT NULL,
+        "results" TEXT NOT NULL,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('[Database] Setup check complete. "HistoricalQuery" table is ready.');
+  } catch (err: any) {
+    console.error('[Database] Warning: Setup check failed or table already exists:', err.message);
+  }
+}
+setupDatabase();
 
 app.use(cors());
 app.use(express.json());
@@ -101,11 +122,98 @@ app.get('/api/weather/history', async (req: Request, res: Response): Promise<voi
 
     const data = await getHistoricalWeatherData(city, startDate, endDate);
     await setCache(cacheKey, data, 86400); // Cache historical data for 1 day
+
+    // Save to PostgreSQL Database
+    try {
+      await prisma.$executeRawUnsafe(
+        'INSERT INTO "HistoricalQuery" ("city", "startDate", "endDate", "results") VALUES ($1, $2, $3, $4)',
+        city,
+        startDate,
+        endDate,
+        JSON.stringify(data)
+      );
+      console.log(`[Database] Stored historical weather query for: ${city}`);
+    } catch (dbErr: any) {
+      console.error('[Database] Failed to store historical query in DB:', dbErr.message);
+    }
+
     res.json(data);
   } catch (error: any) {
     console.error(`Error in /api/weather/history:`, error.message);
     const status = error.message.includes('not found') ? 404 : 500;
     res.status(status).json({ error: error.message || 'Failed to fetch historical weather' });
+  }
+});
+
+// GET /api/weather/history/recent (Get recently queried weather ranges from DB)
+app.get('/api/weather/history/recent', async (req: Request, res: Response) => {
+  try {
+    const queries: any = await prisma.$queryRawUnsafe(
+      'SELECT * FROM "HistoricalQuery" ORDER BY "createdAt" DESC LIMIT 10'
+    );
+    const parsedQueries = queries.map((q: any) => ({
+      ...q,
+      id: q.id.toString(),
+      results: JSON.parse(q.results)
+    }));
+    res.json(parsedQueries);
+  } catch (error: any) {
+    console.error(`Error fetching recent historical queries:`, error.message);
+    res.status(500).json({ error: 'Failed to load historical queries from database' });
+  }
+});
+
+// GET /api/trips/export/pdf (Export itinerary to PDF using pdfkit)
+app.get('/api/trips/export/pdf', async (req: Request, res: Response) => {
+  try {
+    const trips = await prisma.trip.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const doc = new PDFDocument({ margin: 50 });
+    let buffers: any[] = [];
+    doc.on('data', buffers.push.bind(buffers));
+    doc.on('end', () => {
+      let pdfData = Buffer.concat(buffers);
+      res.writeHead(200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'attachment; filename=weathermind_trips.pdf',
+        'Content-Length': pdfData.length
+      });
+      res.end(pdfData);
+    });
+
+    // Header section
+    doc.fontSize(26).fillColor('#0E1620').text('🌤️ WeatherMind AI', { align: 'center' });
+    doc.fontSize(13).fillColor('#C98C4A').text('Personal Travel Itinerary & Intelligence', { align: 'center' });
+    doc.moveDown(1.5);
+    
+    doc.strokeColor('#E5E7EB').lineWidth(1).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(1.5);
+
+    doc.fontSize(9).fillColor('#6B7280').text(`Exported on: ${new Date().toLocaleString()}`, { align: 'right' });
+    doc.moveDown(1.5);
+
+    if (trips.length === 0) {
+      doc.fontSize(12).fillColor('#4B5563').text('No saved trips found in your itinerary.', { align: 'center' });
+    } else {
+      trips.forEach((trip: any, index: number) => {
+        doc.fontSize(15).fillColor('#0E1620').text(`${index + 1}. ${trip.city}, ${trip.country}`, { underline: true });
+        doc.moveDown(0.4);
+        doc.fontSize(10).fillColor('#374151').text(`Dates: ${trip.dates}`);
+        doc.text(`Temperature Snapshot: ${trip.tempSnapshot}`);
+        doc.text(`Outlook: ${trip.info}`);
+        doc.moveDown();
+        
+        doc.strokeColor('#F3F4F6').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown();
+      });
+    }
+
+    doc.end();
+  } catch (error: any) {
+    console.error(`Error exporting PDF:`, error.message);
+    res.status(500).json({ error: 'Failed to generate PDF export' });
   }
 });
 
