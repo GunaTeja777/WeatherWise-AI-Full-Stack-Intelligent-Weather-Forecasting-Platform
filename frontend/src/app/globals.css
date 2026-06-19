@@ -15,6 +15,7 @@
   --font-body: var(--font-inter), sans-serif;
 
   --animate-sun-breathe: sun-breathe 6s ease-in-out infinite;
+  --animate-sun-breathe-soft: sun-breathe-soft 7s ease-in-out infinite;
   --animate-moon-glow: moon-glow 6s ease-in-out infinite;
   --animate-twinkle: twinkle 3s ease-in-out infinite;
   --animate-drift-1: drift-1 70s linear infinite;
@@ -29,6 +30,17 @@
     }
     50% {
       box-shadow: 0 0 110px 40px rgba(232, 184, 109, 0.45), 0 0 36px 10px rgba(255, 231, 184, 0.6);
+    }
+  }
+
+  @keyframes sun-breathe-soft {
+    0%, 100% {
+      box-shadow: 0 0 50px 15px rgba(244, 196, 128, 0.2), 0 0 20px 4px rgba(255, 235, 208, 0.35);
+      transform: scale(0.98);
+    }
+    50% {
+      box-shadow: 0 0 70px 25px rgba(244, 196, 128, 0.3), 0 0 24px 6px rgba(255, 235, 208, 0.45);
+      transform: scale(1.02);
     }
   }
 

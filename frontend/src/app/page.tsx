@@ -883,14 +883,25 @@ export default function Home() {
     "heavy-rain": "linear-gradient(180deg,#0D1017 0%,#07080B 50%,#020305 100%)"
   };
 
-  const getIsNight = () => {
-    if (!localTime || localTime === "—") return false;
+  const getLocalHour = () => {
+    if (!localTime || localTime === "—") return 12; // default to noon
     const match = localTime.match(/^(\d{2}):/);
-    if (!match) return false;
-    const hour = parseInt(match[1], 10);
-    return hour >= 19 || hour < 6;
+    if (!match) return 12;
+    return parseInt(match[1], 10);
   };
-  const isNight = getIsNight();
+  const localHour = getLocalHour();
+
+  const isNight = localHour >= 19 || localHour < 6;
+  const isMorning = localHour >= 6 && localHour < 11;
+  const isRaining = selectedCity.skyType === "rain" || selectedCity.skyType === "heavy-rain";
+
+  // Dynamic cloud color based on weather and time of day
+  const getCloudColor = () => {
+    if (isRaining) return "rgba(30, 36, 46, 0.92)"; // Dark storm clouds
+    if (isNight) return "rgba(45, 55, 72, 0.65)"; // Dark night clouds
+    return "rgba(255, 255, 255, 0.85)"; // Bright day clouds
+  };
+  const cloudColor = getCloudColor();
 
   const activeGradient = isNight
     ? (nightGradients[selectedCity.skyType] || nightGradients.clear)
@@ -938,10 +949,16 @@ export default function Home() {
             />
           ))}
 
-          {/* Sun (only visible in Clear and Haze/Cloudy, and only during day) */}
-          {!isNight && (selectedCity.skyType === "clear" || selectedCity.skyType === "haze") && (
+          {/* Sun (only visible in Clear, Haze, or Rain during day/morning) */}
+          {!isNight && (selectedCity.skyType === "clear" || selectedCity.skyType === "haze" || isRaining) && (
             <div className="absolute top-[14%] left-1/2 -translate-x-1/2">
-              <div className="w-[120px] h-[120px] rounded-full bg-gradient-to-br from-[#FFE7B8] via-[#E8B86D] to-[#C98C4A] animate-sun-breathe"></div>
+              <div 
+                className={`w-[120px] h-[120px] rounded-full transition-all duration-1000 ${
+                  isMorning 
+                    ? "bg-gradient-to-br from-[#FFEBD0] via-[#F4C480] to-[#D89543] opacity-75 animate-sun-breathe-soft" 
+                    : "bg-gradient-to-br from-[#FFE7B8] via-[#E8B86D] to-[#C98C4A] animate-sun-breathe"
+                }`}
+              />
             </div>
           )}
 
@@ -961,11 +978,34 @@ export default function Home() {
           {/* Clouds */}
           {selectedCity.skyType !== "clear" && (
             <>
+              {/* Extra storm clouds if it is raining */}
+              {isRaining && (
+                <>
+                  <div className="absolute opacity-90 top-[25%] left-0 w-[280px] animate-drift-3" style={{ animationDelay: "-35s" }}>
+                    <svg viewBox="0 0 240 90" width="280" height="105">
+                      <path 
+                        d="M40 70 Q20 70 20 50 Q20 30 42 32 Q46 12 70 14 Q96 -2 116 16 Q140 10 150 30 Q176 28 180 50 Q200 50 200 66 Q200 78 184 78 L42 78 Q40 78 40 70Z" 
+                        fill="rgba(18, 22, 30, 0.95)"
+                      />
+                    </svg>
+                  </div>
+                  <div className="absolute opacity-80 top-[15%] left-0 w-[210px] animate-drift-1" style={{ animationDelay: "-48s" }}>
+                    <svg viewBox="0 0 170 70" width="210" height="85">
+                      <path 
+                        d="M28 52 Q12 52 12 36 Q12 20 30 22 Q34 6 54 9 Q74 -4 90 10 Q110 6 116 22 Q136 22 138 38 Q150 38 150 50 Q150 58 138 58 L30 58 Q28 58 28 52Z" 
+                        fill="rgba(22, 28, 38, 0.9)"
+                      />
+                    </svg>
+                  </div>
+                </>
+              )}
+
+              {/* Standard clouds */}
               <div className="absolute opacity-80 top-[18%] left-0 w-[240px] animate-drift-1" style={{ animationDelay: "-20s" }}>
                 <svg viewBox="0 0 240 90" width="240" height="90">
                   <path 
                     d="M40 70 Q20 70 20 50 Q20 30 42 32 Q46 12 70 14 Q96 -2 116 16 Q140 10 150 30 Q176 28 180 50 Q200 50 200 66 Q200 78 184 78 L42 78 Q40 78 40 70Z" 
-                    fill={isNight ? "rgba(45, 55, 72, 0.65)" : "rgba(255,255,255,0.85)"}
+                    fill={cloudColor}
                   />
                 </svg>
               </div>
@@ -973,7 +1013,7 @@ export default function Home() {
                 <svg viewBox="0 0 170 70" width="170" height="70">
                   <path 
                     d="M28 52 Q12 52 12 36 Q12 20 30 22 Q34 6 54 9 Q74 -4 90 10 Q110 6 116 22 Q136 22 138 38 Q150 38 150 50 Q150 58 138 58 L30 58 Q28 58 28 52Z" 
-                    fill={isNight ? "rgba(45, 55, 72, 0.55)" : "rgba(255,255,255,0.7)"}
+                    fill={cloudColor}
                   />
                 </svg>
               </div>
@@ -981,7 +1021,7 @@ export default function Home() {
                 <svg viewBox="0 0 130 55" width="130" height="55">
                   <path 
                     d="M22 40 Q10 40 10 28 Q10 16 24 17 Q27 5 42 7 Q57 -3 70 8 Q85 5 90 17 Q104 17 106 30 Q116 30 116 39 Q116 45 106 45 L23 45 Q22 45 22 40Z" 
-                    fill={isNight ? "rgba(45, 55, 72, 0.45)" : "rgba(255,255,255,0.6)"}
+                    fill={cloudColor}
                   />
                 </svg>
               </div>
@@ -989,7 +1029,7 @@ export default function Home() {
                 <svg viewBox="0 0 200 80" width="200" height="80">
                   <path 
                     d="M34 60 Q16 60 16 42 Q16 24 36 26 Q40 8 62 11 Q84 -3 102 13 Q124 7 132 26 Q154 25 158 44 Q172 44 172 56 Q172 66 158 66 L36 66 Q34 66 34 60Z" 
-                    fill={isNight ? "rgba(45, 55, 72, 0.35)" : "rgba(255,255,255,0.5)"}
+                    fill={cloudColor}
                   />
                 </svg>
               </div>
@@ -1007,6 +1047,22 @@ export default function Home() {
                 animationDuration: drop.duration,
                 animationDelay: drop.delay,
                 opacity: drop.opacity
+              }}
+            />
+          ))}
+
+          {/* Heavy dense rain overlay */}
+          {selectedCity.skyType === "heavy-rain" && miniRainDrops1.map((drop, idx) => (
+            <div
+              key={`dense-${idx}`}
+              className="drop"
+              style={{
+                left: drop.left,
+                height: `${parseFloat(drop.height) * 1.5}px`,
+                animationDuration: `${parseFloat(drop.duration) * 0.75}s`,
+                animationDelay: drop.delay,
+                opacity: (parseFloat(drop.opacity) * 1.25).toFixed(2),
+                width: "2px"
               }}
             />
           ))}
