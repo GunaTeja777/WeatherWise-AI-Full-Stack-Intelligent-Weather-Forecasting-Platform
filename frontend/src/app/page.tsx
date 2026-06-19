@@ -1033,6 +1033,24 @@ export default function Home() {
                   />
                 </svg>
               </div>
+
+              {/* Middle-level clouds (starting from center/right of center on page load) */}
+              <div className="absolute opacity-60 top-[48%] left-0 w-[200px] animate-drift-2" style={{ animationDelay: "-30s" }}>
+                <svg viewBox="0 0 170 70" width="200" height="80">
+                  <path 
+                    d="M28 52 Q12 52 12 36 Q12 20 30 22 Q34 6 54 9 Q74 -4 90 10 Q110 6 116 22 Q136 22 138 38 Q150 38 150 50 Q150 58 138 58 L30 58 Q28 58 28 52Z" 
+                    fill={cloudColor}
+                  />
+                </svg>
+              </div>
+              <div className="absolute opacity-50 top-[56%] left-0 w-[260px] animate-drift-4" style={{ animationDelay: "-65s" }}>
+                <svg viewBox="0 0 240 90" width="260" height="98">
+                  <path 
+                    d="M40 70 Q20 70 20 50 Q20 30 42 32 Q46 12 70 14 Q96 -2 116 16 Q140 10 150 30 Q176 28 180 50 Q200 50 200 66 Q200 78 184 78 L42 78 Q40 78 40 70Z" 
+                    fill={cloudColor}
+                  />
+                </svg>
+              </div>
             </>
           )}
 
@@ -1040,7 +1058,7 @@ export default function Home() {
           {isRainySky && heroRainDrops.map((drop, idx) => (
             <div
               key={idx}
-              className="drop"
+              className="drop animate-fall"
               style={{
                 left: drop.left,
                 height: drop.height,
@@ -1055,7 +1073,7 @@ export default function Home() {
           {selectedCity.skyType === "heavy-rain" && miniRainDrops1.map((drop, idx) => (
             <div
               key={`dense-${idx}`}
-              className="drop"
+              className="drop animate-fall"
               style={{
                 left: drop.left,
                 height: `${parseFloat(drop.height) * 1.5}px`,

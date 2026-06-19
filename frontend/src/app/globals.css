@@ -59,23 +59,23 @@
   }
 
   @keyframes drift-1 {
-    from { transform: translateX(-12%); }
-    to { transform: translateX(112%); }
+    from { transform: translateX(-300px); }
+    to { transform: translateX(100vw); }
   }
 
   @keyframes drift-2 {
-    from { transform: translateX(-15%); }
-    to { transform: translateX(115%); }
+    from { transform: translateX(-300px); }
+    to { transform: translateX(100vw); }
   }
 
   @keyframes drift-3 {
-    from { transform: translateX(-10%); }
-    to { transform: translateX(110%); }
+    from { transform: translateX(-300px); }
+    to { transform: translateX(100vw); }
   }
 
   @keyframes drift-4 {
-    from { transform: translateX(-18%); }
-    to { transform: translateX(118%); }
+    from { transform: translateX(-300px); }
+    to { transform: translateX(100vw); }
   }
 
   @keyframes fall {
