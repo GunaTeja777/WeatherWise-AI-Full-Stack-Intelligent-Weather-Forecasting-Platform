@@ -383,6 +383,9 @@ export default function Home() {
   const [heroRainDrops, setHeroRainDrops] = useState<RainDrop[]>([]);
   const [miniRainDrops1, setMiniRainDrops1] = useState<RainDrop[]>([]);
   const [miniRainDrops2, setMiniRainDrops2] = useState<RainDrop[]>([]);
+  
+  // Star animation state for night sky
+  const [stars, setStars] = useState<{ left: string; top: string; size: string; delay: string; duration: string }[]>([]);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
@@ -504,6 +507,16 @@ export default function Home() {
       opacity: `${(0.4 + Math.random() * 0.4).toFixed(2)}`
     }));
     setMiniRainDrops2(mini2);
+
+    // Generate random stars for the night sky
+    const starList = Array.from({ length: 45 }, () => ({
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 65}%`,
+      size: `${1 + Math.random() * 1.5}px`,
+      delay: `${(Math.random() * 5).toFixed(2)}s`,
+      duration: `${(2 + Math.random() * 3).toFixed(2)}s`
+    }));
+    setStars(starList);
   }, [isMounted]);
 
   // Search autocomplete suggestion list
@@ -862,7 +875,27 @@ export default function Home() {
     "heavy-rain": "linear-gradient(180deg,#344454 0%,#212D38 38%,#141C24 68%,#0C1217 100%)"
   };
 
-  const activeGradient = skyGradients[selectedCity.skyType] || skyGradients.haze;
+  const nightGradients = {
+    clear: "linear-gradient(180deg,#0B1021 0%,#050814 50%,#010206 100%)",
+    haze: "linear-gradient(180deg,#161B29 0%,#0F121C 50%,#07080E 100%)",
+    overcast: "linear-gradient(180deg,#1C2230 0%,#131722 50%,#0A0C12 100%)",
+    rain: "linear-gradient(180deg,#121620 0%,#0B0D14 50%,#05060A 100%)",
+    "heavy-rain": "linear-gradient(180deg,#0D1017 0%,#07080B 50%,#020305 100%)"
+  };
+
+  const getIsNight = () => {
+    if (!localTime || localTime === "—") return false;
+    const match = localTime.match(/^(\d{2}):/);
+    if (!match) return false;
+    const hour = parseInt(match[1], 10);
+    return hour >= 19 || hour < 6;
+  };
+  const isNight = getIsNight();
+
+  const activeGradient = isNight
+    ? (nightGradients[selectedCity.skyType] || nightGradients.clear)
+    : (skyGradients[selectedCity.skyType] || skyGradients.haze);
+
   const isRainySky = selectedCity.skyType === "rain" || selectedCity.skyType === "heavy-rain" || selectedCity.skyType === "haze";
 
   return (
@@ -889,27 +922,76 @@ export default function Home() {
         aria-label={`Current weather for ${selectedCity.city}, ${selectedCity.country}`}
       >
         <div className="absolute inset-0 pointer-events-none print:hidden" aria-hidden="true">
-          {/* Sun (only visible in Clear and Haze/Cloudy) */}
-          {(selectedCity.skyType === "clear" || selectedCity.skyType === "haze") && (
+          {/* Twinkling Stars (only visible at night) */}
+          {isNight && stars.map((star, idx) => (
+            <div
+              key={idx}
+              className="absolute rounded-full bg-white animate-twinkle"
+              style={{
+                left: star.left,
+                top: star.top,
+                width: star.size,
+                height: star.size,
+                animationDelay: star.delay,
+                animationDuration: star.duration
+              }}
+            />
+          ))}
+
+          {/* Sun (only visible in Clear and Haze/Cloudy, and only during day) */}
+          {!isNight && (selectedCity.skyType === "clear" || selectedCity.skyType === "haze") && (
             <div className="absolute top-[14%] left-1/2 -translate-x-1/2">
               <div className="w-[120px] h-[120px] rounded-full bg-gradient-to-br from-[#FFE7B8] via-[#E8B86D] to-[#C98C4A] animate-sun-breathe"></div>
+            </div>
+          )}
+
+          {/* Moon (only visible at night) */}
+          {isNight && (
+            <div className="absolute top-[14%] left-1/2 -translate-x-1/2 flex items-center justify-center">
+              <div className="relative w-[110px] h-[110px] rounded-full bg-[#E5E9F0] animate-moon-glow flex items-center justify-center overflow-hidden">
+                {/* Moon craters */}
+                <div className="absolute top-[20%] left-[25%] w-[18px] h-[18px] rounded-full bg-black/10"></div>
+                <div className="absolute top-[50%] left-[60%] w-[24px] h-[24px] rounded-full bg-black/10"></div>
+                <div className="absolute top-[65%] left-[30%] w-[14px] h-[14px] rounded-full bg-black/10"></div>
+                <div className="absolute top-[30%] left-[70%] w-[12px] h-[12px] rounded-full bg-black/10"></div>
+              </div>
             </div>
           )}
 
           {/* Clouds */}
           {selectedCity.skyType !== "clear" && (
             <>
-              <div className="absolute opacity-90 top-[18%] left-0 w-[240px] animate-drift-1">
-                <svg viewBox="0 0 240 90" width="240" height="90"><path d="M40 70 Q20 70 20 50 Q20 30 42 32 Q46 12 70 14 Q96 -2 116 16 Q140 10 150 30 Q176 28 180 50 Q200 50 200 66 Q200 78 184 78 L42 78 Q40 78 40 70Z" fill="rgba(255,255,255,0.85)"/></svg>
+              <div className="absolute opacity-80 top-[18%] left-0 w-[240px] animate-drift-1" style={{ animationDelay: "-20s" }}>
+                <svg viewBox="0 0 240 90" width="240" height="90">
+                  <path 
+                    d="M40 70 Q20 70 20 50 Q20 30 42 32 Q46 12 70 14 Q96 -2 116 16 Q140 10 150 30 Q176 28 180 50 Q200 50 200 66 Q200 78 184 78 L42 78 Q40 78 40 70Z" 
+                    fill={isNight ? "rgba(45, 55, 72, 0.65)" : "rgba(255,255,255,0.85)"}
+                  />
+                </svg>
               </div>
-              <div className="absolute opacity-70 top-[30%] left-0 w-[170px] animate-drift-2">
-                <svg viewBox="0 0 170 70" width="170" height="70"><path d="M28 52 Q12 52 12 36 Q12 20 30 22 Q34 6 54 9 Q74 -4 90 10 Q110 6 116 22 Q136 22 138 38 Q150 38 150 50 Q150 58 138 58 L30 58 Q28 58 28 52Z" fill="rgba(255,255,255,0.7)"/></svg>
+              <div className="absolute opacity-65 top-[30%] left-0 w-[170px] animate-drift-2" style={{ animationDelay: "-55s" }}>
+                <svg viewBox="0 0 170 70" width="170" height="70">
+                  <path 
+                    d="M28 52 Q12 52 12 36 Q12 20 30 22 Q34 6 54 9 Q74 -4 90 10 Q110 6 116 22 Q136 22 138 38 Q150 38 150 50 Q150 58 138 58 L30 58 Q28 58 28 52Z" 
+                    fill={isNight ? "rgba(45, 55, 72, 0.55)" : "rgba(255,255,255,0.7)"}
+                  />
+                </svg>
               </div>
-              <div className="absolute opacity-60 top-[10%] left-0 w-[130px] animate-drift-3">
-                <svg viewBox="0 0 130 55" width="130" height="55"><path d="M22 40 Q10 40 10 28 Q10 16 24 17 Q27 5 42 7 Q57 -3 70 8 Q85 5 90 17 Q104 17 106 30 Q116 30 116 39 Q116 45 106 45 L23 45 Q22 45 22 40Z" fill="rgba(255,255,255,0.6)"/></svg>
+              <div className="absolute opacity-55 top-[10%] left-0 w-[130px] animate-drift-3" style={{ animationDelay: "-10s" }}>
+                <svg viewBox="0 0 130 55" width="130" height="55">
+                  <path 
+                    d="M22 40 Q10 40 10 28 Q10 16 24 17 Q27 5 42 7 Q57 -3 70 8 Q85 5 90 17 Q104 17 106 30 Q116 30 116 39 Q116 45 106 45 L23 45 Q22 45 22 40Z" 
+                    fill={isNight ? "rgba(45, 55, 72, 0.45)" : "rgba(255,255,255,0.6)"}
+                  />
+                </svg>
               </div>
-              <div className="absolute opacity-50 top-[42%] left-0 w-[200px] animate-drift-4">
-                <svg viewBox="0 0 200 80" width="200" height="80"><path d="M34 60 Q16 60 16 42 Q16 24 36 26 Q40 8 62 11 Q84 -3 102 13 Q124 7 132 26 Q154 25 158 44 Q172 44 172 56 Q172 66 158 66 L36 66 Q34 66 34 60Z" fill="rgba(255,255,255,0.5)"/></svg>
+              <div className="absolute opacity-45 top-[42%] left-0 w-[200px] animate-drift-4" style={{ animationDelay: "-80s" }}>
+                <svg viewBox="0 0 200 80" width="200" height="80">
+                  <path 
+                    d="M34 60 Q16 60 16 42 Q16 24 36 26 Q40 8 62 11 Q84 -3 102 13 Q124 7 132 26 Q154 25 158 44 Q172 44 172 56 Q172 66 158 66 L36 66 Q34 66 34 60Z" 
+                    fill={isNight ? "rgba(45, 55, 72, 0.35)" : "rgba(255,255,255,0.5)"}
+                  />
+                </svg>
               </div>
             </>
           )}
