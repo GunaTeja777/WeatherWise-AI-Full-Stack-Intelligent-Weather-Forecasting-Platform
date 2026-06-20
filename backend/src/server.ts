@@ -124,9 +124,15 @@ app.get('/api/weather/history', async (req: Request, res: Response): Promise<voi
   const start = new Date(startDate);
   const end = new Date(endDate);
   const today = new Date();
+  const minDate = new Date('1940-01-01');
 
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     res.status(400).json({ error: 'Invalid date formats. Use YYYY-MM-DD' });
+    return;
+  }
+
+  if (start < minDate) {
+    res.status(400).json({ error: 'Start date cannot be before 1940-01-01' });
     return;
   }
 
@@ -137,6 +143,13 @@ app.get('/api/weather/history', async (req: Request, res: Response): Promise<voi
 
   if (end > today) {
     res.status(400).json({ error: 'End date cannot be in the future for historical queries' });
+    return;
+  }
+
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  if (diffDays > 90) {
+    res.status(400).json({ error: 'Date range cannot exceed 90 days for historical lookup' });
     return;
   }
 

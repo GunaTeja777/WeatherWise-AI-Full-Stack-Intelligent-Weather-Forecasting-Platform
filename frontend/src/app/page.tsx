@@ -37,6 +37,15 @@ interface CityData {
   }[];
 }
 
+interface HistoricalQuery {
+  id: string;
+  city: string;
+  startDate: string;
+  endDate: string;
+  results: { date: string; tempMax: number; tempMin: number }[];
+  createdAt?: string;
+}
+
 // Built-in cities database
 const CITIES_DB: Record<string, CityData> = {
   istanbul: {
@@ -334,6 +343,59 @@ interface RainDrop {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
+// Helper to parse date ranges back to YYYY-MM-DD for editing
+function parseDateRange(datesStr: string): { start: string; end: string } {
+  try {
+    const cleaned = datesStr.replace(/\s+/g, " ");
+    const parts = cleaned.split(/ [–-]/);
+    if (parts.length < 2) return { start: "", end: "" };
+    
+    const startPart = parts[0].trim();
+    const endPartWithYear = parts[1].trim();
+    
+    const yearMatch = endPartWithYear.match(/,?\s*(\d{4})$/);
+    if (!yearMatch) return { start: "", end: "" };
+    const year = yearMatch[1];
+    
+    const endPart = endPartWithYear.replace(/,?\s*\d{4}$/, "").trim();
+    
+    const monthNames: Record<string, string> = {
+      jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+      jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12"
+    };
+    
+    const startSplit = startPart.split(" ");
+    if (startSplit.length < 2) return { start: "", end: "" };
+    const startMonthAbbr = startSplit[0].toLowerCase().substring(0, 3);
+    const startMonth = monthNames[startMonthAbbr];
+    const startDay = startSplit[1].padStart(2, "0");
+    
+    let endMonth = startMonth;
+    let endDay = "";
+    
+    const endSplit = endPart.split(" ");
+    if (endSplit.length === 1) {
+      endDay = endSplit[0].padStart(2, "0");
+    } else if (endSplit.length === 2) {
+      const endMonthAbbr = endSplit[0].toLowerCase().substring(0, 3);
+      endMonth = monthNames[endMonthAbbr];
+      endDay = endSplit[1].padStart(2, "0");
+    } else {
+      return { start: "", end: "" };
+    }
+    
+    if (!startMonth || !endMonth) return { start: "", end: "" };
+    
+    return {
+      start: `${year}-${startMonth}-${startDay}`,
+      end: `${year}-${endMonth}-${endDay}`
+    };
+  } catch (err) {
+    console.warn("Failed to parse date range:", datesStr, err);
+    return { start: "", end: "" };
+  }
+}
+
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const [selectedCity, setSelectedCity] = useState<CityData>(CITIES_DB.istanbul);
@@ -350,6 +412,8 @@ export default function Home() {
   const [modalStart, setModalStart] = useState("");
   const [modalEnd, setModalEnd] = useState("");
   const [editingTripId, setEditingTripId] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [modalSaving, setModalSaving] = useState(false);
 
   // Historical query state
   const [histCity, setHistCity] = useState("");
@@ -358,7 +422,7 @@ export default function Home() {
   const [histResults, setHistResults] = useState<{ date: string; tempMax: number; tempMin: number }[] | null>(null);
   const [histLoading, setHistLoading] = useState(false);
   const [histError, setHistError] = useState<string | null>(null);
-  const [recentHistQueries, setRecentHistQueries] = useState<any[]>([]);
+  const [recentHistQueries, setRecentHistQueries] = useState<HistoricalQuery[]>([]);
 
   const fetchRecentHistQueries = async () => {
     try {
@@ -653,12 +717,25 @@ export default function Home() {
     const end = new Date(histEnd);
     const today = new Date();
 
+    const minDate = new Date('1940-01-01');
+
+    if (start < minDate) {
+      setHistError("Start Date cannot be before 1940-01-01.");
+      return;
+    }
     if (start > end) {
       setHistError("Start Date must be before or equal to End Date.");
       return;
     }
     if (end > today) {
       setHistError("End Date cannot be in the future for historical lookup.");
+      return;
+    }
+
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays > 90) {
+      setHistError("Date range cannot exceed 90 days.");
       return;
     }
 
@@ -709,8 +786,10 @@ export default function Home() {
     if (trip) {
       setEditingTripId(id);
       setModalCity(trip.city);
-      setModalStart("");
-      setModalEnd("");
+      const parsed = parseDateRange(trip.dates);
+      setModalStart(parsed.start);
+      setModalEnd(parsed.end);
+      setModalError(null);
       setShowModal(true);
     }
   };
@@ -720,12 +799,37 @@ export default function Home() {
     setModalCity("");
     setModalStart("");
     setModalEnd("");
+    setModalError(null);
     setShowModal(true);
   };
 
   const handleSaveTrip = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!modalCity || !modalStart || !modalEnd) return;
+
+    // Date range validation
+    const start = new Date(modalStart);
+    const end = new Date(modalEnd);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (start > end) {
+      setModalError("End date must be after or equal to start date.");
+      return;
+    }
+    if (start < today) {
+      setModalError("Trip start date cannot be in the past.");
+      return;
+    }
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays > 365) {
+      setModalError("Trip duration cannot exceed 365 days.");
+      return;
+    }
+
+    setModalSaving(true);
+    setModalError(null);
 
     const formattedDates = formatDateRange(modalStart, modalEnd);
     const key = modalCity.toLowerCase().trim();
@@ -737,6 +841,11 @@ export default function Home() {
         const res = await fetch(`${BACKEND_URL}/api/weather?city=${encodeURIComponent(modalCity)}`);
         if (res.ok) {
           weatherRef = await res.json();
+        } else {
+          const errData = await res.json();
+          setModalError(errData.error || `City "${modalCity}" not found.`);
+          setModalSaving(false);
+          return;
         }
       } catch (err) {
         console.warn("Could not fetch city weather from API, generating fallback", err);
@@ -777,7 +886,14 @@ export default function Home() {
         await fetch(`${BACKEND_URL}/api/trips/${editingTripId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dates: formattedDates })
+          body: JSON.stringify({
+            city: weatherRef.city,
+            country: weatherRef.country,
+            dates: formattedDates,
+            tempSnapshot,
+            info,
+            gradient
+          })
         });
       } catch (err) {
         console.warn("Could not save edit to backend", err);
@@ -815,6 +931,7 @@ export default function Home() {
       }
     }
 
+    setModalSaving(false);
     setShowModal(false);
   };
 
@@ -1544,7 +1661,7 @@ export default function Home() {
                   Stored Database Queries (Date Ranges)
                 </h4>
                 <div className="flex flex-wrap gap-2">
-                  {recentHistQueries.map((q: any) => (
+                  {recentHistQueries.map((q: HistoricalQuery) => (
                     <button
                       key={q.id}
                       type="button"
@@ -1657,15 +1774,23 @@ export default function Home() {
               {editingTripId ? "Edit trip details" : "Add a new trip"}
             </h3>
             <form onSubmit={handleSaveTrip} className="space-y-4">
+              {modalError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-700 text-[0.82rem] rounded-lg flex items-center gap-2 animate-fade-in">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-red-600"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span>{modalError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[0.75rem] font-semibold uppercase tracking-wider text-slate mb-1">Destination City</label>
                 <input
                   type="text"
                   required
+                  disabled={modalSaving}
                   placeholder="e.g. Paris, Tokyo, Istanbul"
                   value={modalCity}
                   onChange={(e) => setModalCity(e.target.value)}
-                  className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all"
+                  className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all disabled:opacity-50"
                 />
               </div>
 
@@ -1675,9 +1800,10 @@ export default function Home() {
                   <input
                     type="date"
                     required
+                    disabled={modalSaving}
                     value={modalStart}
                     onChange={(e) => setModalStart(e.target.value)}
-                    className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all"
+                    className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -1685,9 +1811,10 @@ export default function Home() {
                   <input
                     type="date"
                     required
+                    disabled={modalSaving}
                     value={modalEnd}
                     onChange={(e) => setModalEnd(e.target.value)}
-                    className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all"
+                    className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -1696,15 +1823,23 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-full border border-card-line text-slate hover:bg-black/5 text-[0.85rem] font-medium transition-colors"
+                  disabled={modalSaving}
+                  className="px-4 py-2 rounded-full border border-card-line text-slate hover:bg-black/5 text-[0.85rem] font-medium transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-full bg-ink text-paper hover:bg-[#2B333D] text-[0.85rem] font-semibold transition-colors"
+                  disabled={modalSaving}
+                  className="px-5 py-2 rounded-full bg-ink text-paper hover:bg-[#2B333D] text-[0.85rem] font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  Save Trip
+                  {modalSaving && (
+                    <svg className="animate-spin h-3.5 w-3.5 text-paper" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  )}
+                  {modalSaving ? "Saving..." : "Save Trip"}
                 </button>
               </div>
             </form>

@@ -453,6 +453,9 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
       places
     };
   } catch (err: any) {
+    if (err.message && err.message.includes('not found')) {
+      throw err;
+    }
     console.error(`[Weather] Error fetching live data for ${cityName}:`, err.message);
     return generateFallbackCityData(cityName);
   }
