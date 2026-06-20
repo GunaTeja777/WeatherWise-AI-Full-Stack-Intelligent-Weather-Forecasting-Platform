@@ -333,13 +333,7 @@ function formatDateRange(startDateStr: string, endDateStr: string): string {
   }
 }
 
-interface RainDrop {
-  left: string;
-  height: string;
-  duration: string;
-  delay: string;
-  opacity: string;
-}
+
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
@@ -396,6 +390,396 @@ function parseDateRange(datesStr: string): { start: string; end: string } {
   }
 }
 
+interface WeatherSceneProps {
+  skyType: string;
+  condition: string;
+  temp: number;
+  wind: string;
+  localHour: number;
+}
+
+interface WeatherParticle {
+  x: number;
+  y: number;
+  vy: number;
+  vx: number;
+  len: number;
+  r: number;
+  swing: number;
+  swingSpeed: number;
+  swingStep: number;
+  opacity: number;
+}
+
+interface StarParticle {
+  x: number;
+  y: number;
+  r: number;
+  opacity: number;
+  speed: number;
+}
+
+interface CloudElement {
+  id: number;
+  layer: number;
+  duration: string;
+  delay: string;
+  top: string;
+  scale: number;
+  opacity: number;
+  color: string;
+}
+
+const WeatherScene: React.FC<WeatherSceneProps> = ({
+  skyType,
+  condition,
+  temp,
+  wind,
+  localHour
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Parse wind speed (default 10 km/h if not found)
+  const windSpeed = useMemo(() => {
+    const match = wind.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 10;
+  }, [wind]);
+
+  // Determine time-of-day categories
+  const isSunrise = localHour >= 6 && localHour < 8;
+  const isSunset = localHour >= 17 && localHour < 19;
+  const isNight = localHour >= 19 || localHour < 6;
+
+  // Compute dynamic sky gradient
+  const skyBackground = useMemo(() => {
+    if (isSunrise) {
+      return "linear-gradient(180deg, #E65C00 0%, #F9D423 50%, #225e79 100%)";
+    }
+    if (isSunset) {
+      return "linear-gradient(180deg, #1A0B2E 0%, #962B4C 45%, #E87A5D 75%, #F4C480 100%)";
+    }
+    if (isNight) {
+      if (skyType === "haze") return "linear-gradient(180deg, #161B29 0%, #0F121C 50%, #07080E 100%)";
+      if (skyType === "overcast") return "linear-gradient(180deg, #1C2230 0%, #131722 50%, #0A0C12 100%)";
+      if (skyType === "rain" || skyType === "heavy-rain") return "linear-gradient(180deg, #121620 0%, #0B0D14 50%, #05060A 100%)";
+      return "linear-gradient(180deg, #0B1021 0%, #050814 50%, #010206 100%)"; // clear night
+    }
+    // daytime
+    if (skyType === "clear") return "linear-gradient(180deg, #4A7A96 0%, #294F66 38%, #1A3445 68%, #0F202B 100%)";
+    if (skyType === "overcast") return "linear-gradient(180deg, #5A6A78 0%, #3B4752 38%, #252F38 68%, #161E24 100%)";
+    if (skyType === "rain" || skyType === "heavy-rain") return "linear-gradient(180deg, #344454 0%, #212D38 38%, #141C24 68%, #0C1217 100%)";
+    return "linear-gradient(180deg, #3A5470 0%, #26384C 38%, #172430 68%, #0E1620 100%)"; // haze daytime
+  }, [isSunrise, isSunset, isNight, skyType]);
+
+  // Sun and Moon positions along an astronomical arc
+  const celestials = useMemo(() => {
+    // 6 AM is 0, 6 PM is 1
+    const progress = (localHour >= 6 && localHour < 18)
+      ? (localHour - 6) / 12
+      : (localHour >= 18 ? (localHour - 18) / 12 : (localHour + 6) / 12);
+
+    const x = 15 + progress * 70; // 15% to 85% width
+    const y = 35 - Math.sin(progress * Math.PI) * 20; // peaks at 15% depth
+
+    // Moon phase: calculate based on day of month (approximate lunar phase)
+    const dayOfMonth = new Date().getDate();
+    const phaseIndex = dayOfMonth % 4; // 0: crescent, 1: half, 2: gibbous, 3: full
+    const maskCx = phaseIndex === 0 ? 34 : phaseIndex === 1 ? 50 : phaseIndex === 2 ? 66 : 120;
+
+    return { x, y, maskCx };
+  }, [localHour]);
+
+  // Rain & Snow Particle simulation inside Canvas for maximum 60fps performance
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animationId: number;
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    };
+    window.addEventListener("resize", handleResize);
+
+    // Weather type configurations
+    const isRaining = skyType === "rain" || skyType === "heavy-rain";
+    const isSnowing = condition.toLowerCase().includes("snow") || condition.toLowerCase().includes("chill") || temp < 3;
+    const isThunderstorm = skyType === "heavy-rain";
+
+    // Particles array
+    const particles: WeatherParticle[] = [];
+    const maxParticles = skyType === "heavy-rain" ? 120 : isRaining ? 60 : isSnowing ? 80 : 0;
+
+    // Initialize particles
+    for (let i = 0; i < maxParticles; i++) {
+      if (isRaining) {
+        particles.push({
+          x: Math.random() * width,
+          y: Math.random() * height - height,
+          vy: 8 + Math.random() * 8 + (skyType === "heavy-rain" ? 4 : 0),
+          vx: (windSpeed / 10) * (Math.random() * 1.5 + 0.5),
+          len: 12 + Math.random() * 16,
+          r: 0,
+          swing: 0,
+          swingSpeed: 0,
+          swingStep: 0,
+          opacity: 0.2 + Math.random() * 0.4
+        });
+      } else if (isSnowing) {
+        particles.push({
+          x: Math.random() * width,
+          y: Math.random() * height - height,
+          vy: 1 + Math.random() * 2,
+          vx: (windSpeed / 15) + Math.random() - 0.5,
+          len: 0,
+          r: 2 + Math.random() * 3,
+          swing: Math.random() * 10,
+          swingSpeed: 0.01 + Math.random() * 0.02,
+          swingStep: Math.random() * 100,
+          opacity: 0.3 + Math.random() * 0.5
+        });
+      }
+    }
+
+    // Stars (at night)
+    const starParticles: StarParticle[] = [];
+    if (isNight) {
+      for (let i = 0; i < 40; i++) {
+        starParticles.push({
+          x: Math.random() * width,
+          y: Math.random() * (height * 0.6),
+          r: 0.8 + Math.random() * 1.2,
+          opacity: Math.random(),
+          speed: 0.005 + Math.random() * 0.01
+        });
+      }
+    }
+
+    // Lightning parameters
+    let flashOpacity = 0;
+    let nextFlash = 100 + Math.random() * 300;
+
+    // Loop
+    const draw = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      // 1. Draw Stars at Night
+      if (isNight && starParticles.length > 0) {
+        ctx.fillStyle = "#ffffff";
+        starParticles.forEach(star => {
+          star.opacity += star.speed;
+          if (star.opacity > 1 || star.opacity < 0) {
+            star.speed = -star.speed;
+          }
+          ctx.globalAlpha = Math.max(0, Math.min(1, star.opacity));
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1.0;
+      }
+
+      // 2. Draw Lightning
+      if (isThunderstorm) {
+        nextFlash--;
+        if (nextFlash <= 0) {
+          flashOpacity = 0.6 + Math.random() * 0.4;
+          nextFlash = 250 + Math.random() * 400; // resets interval
+        }
+        if (flashOpacity > 0) {
+          ctx.fillStyle = `rgba(255, 255, 255, ${flashOpacity})`;
+          ctx.fillRect(0, 0, width, height);
+          flashOpacity -= 0.05; // fade flash
+        }
+      }
+
+      // 3. Draw Particles (Rain or Snow)
+      if (isRaining) {
+        ctx.strokeStyle = "rgba(174, 194, 224, 0.5)";
+        ctx.lineWidth = 1.5;
+        particles.forEach(p => {
+          ctx.globalAlpha = p.opacity;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + p.vx, p.y + p.vy);
+          ctx.stroke();
+
+          // Move
+          p.y += p.vy;
+          p.x += p.vx;
+
+          // Recycle
+          if (p.y > height) {
+            p.y = -p.len;
+            p.x = Math.random() * width;
+          }
+        });
+        ctx.globalAlpha = 1.0;
+      } else if (isSnowing) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+        particles.forEach(p => {
+          ctx.globalAlpha = p.opacity;
+          ctx.beginPath();
+          p.swingStep += p.swingSpeed;
+          const xOffset = Math.sin(p.swingStep) * p.swing;
+          ctx.arc(p.x + xOffset, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Move
+          p.y += p.vy;
+          p.x += p.vx;
+
+          // Recycle
+          if (p.y > height) {
+            p.y = -p.r * 2;
+            p.x = Math.random() * width;
+          }
+        });
+        ctx.globalAlpha = 1.0;
+      }
+
+      animationId = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      cancelAnimationFrame(animationId);
+    };
+  }, [skyType, condition, temp, windSpeed, isNight]);
+
+  // Compute dynamic cloud properties based on wind speed & skyType
+  const clouds = useMemo(() => {
+    const list: CloudElement[] = [];
+    let cloudDensity = 0;
+    if (skyType === "clear") cloudDensity = 1;
+    else if (skyType === "haze") cloudDensity = 3;
+    else if (skyType === "overcast") cloudDensity = 6;
+    else cloudDensity = 8; // rain/storm
+
+    const colors = {
+      storm: "rgba(32, 42, 58, 0.92)",
+      night: "rgba(40, 52, 70, 0.65)",
+      day: "rgba(255, 255, 255, 0.82)"
+    };
+    const color = (skyType === "rain" || skyType === "heavy-rain")
+      ? colors.storm
+      : isNight ? colors.night : colors.day;
+
+    for (let i = 0; i < cloudDensity; i++) {
+      // 3 parallax layers (speed, scale, depth)
+      const layer = (i % 3) + 1; // 1: far/slow, 2: mid, 3: near/fast
+
+      // Calculate speed: higher layer = faster, higher windSpeed = faster
+      const windFactor = Math.max(3, windSpeed);
+      const baseDuration = layer === 1 ? 160 : layer === 2 ? 100 : 60;
+      const duration = baseDuration / (windFactor / 10);
+
+      list.push({
+        id: i,
+        layer,
+        duration: duration.toFixed(1),
+        delay: `-${(Math.random() * baseDuration).toFixed(1)}s`,
+        top: `${10 + Math.random() * 32}%`,
+        scale: layer === 1 ? 0.6 : layer === 2 ? 0.85 : 1.1,
+        opacity: layer === 1 ? 0.35 : layer === 2 ? 0.65 : 0.85,
+        color
+      });
+    }
+
+    return list;
+  }, [skyType, windSpeed, isNight]);
+
+  return (
+    <div
+      className="absolute inset-0 transition-all duration-1000 ease-in-out pointer-events-none"
+      style={{ background: skyBackground }}
+    >
+      <style>{`
+        @keyframes drift {
+          from { transform: translate3d(-300px, 0, 0); }
+          to { transform: translate3d(100vw, 0, 0); }
+        }
+      `}</style>
+
+      {/* 1. Dynamic Sun / Moon */}
+      {(!isNight && (skyType === "clear" || skyType === "haze" || skyType === "rain")) && (
+        <div
+          className="absolute w-[120px] h-[120px] rounded-full transition-all duration-1000 bg-gradient-to-br from-[#FFE7B8] via-[#E8B86D] to-[#C98C4A] shadow-[0_0_60px_rgba(255,230,180,0.5)] animate-pulse"
+          style={{
+            left: `${celestials.x}%`,
+            top: `${celestials.y}%`,
+            transform: "translate(-50%, -50%)"
+          }}
+        />
+      )}
+
+      {isNight && (
+        <div
+          className="absolute w-[110px] h-[110px] transition-all duration-1000"
+          style={{
+            left: `${celestials.x}%`,
+            top: `${celestials.y}%`,
+            transform: "translate(-50%, -50%)"
+          }}
+        >
+          <svg className="w-[110px] h-[110px] drop-shadow-[0_0_20px_rgba(229,233,240,0.35)]" viewBox="0 0 100 100">
+            <defs>
+              <mask id="moon-mask">
+                <rect x="0" y="0" width="100" height="100" fill="white" />
+                <circle cx={celestials.maskCx} cy="50" r="45" fill="black" />
+              </mask>
+            </defs>
+            <circle cx="50" cy="50" r="45" fill="#E5E9F0" mask="url(#moon-mask)" />
+            <circle cx="35" cy="30" r="7" fill="#D8DEE9" opacity="0.4" />
+            <circle cx="65" cy="55" r="9" fill="#D8DEE9" opacity="0.4" />
+            <circle cx="45" cy="68" r="5" fill="#D8DEE9" opacity="0.4" />
+          </svg>
+        </div>
+      )}
+
+      {/* 2. Parallax Cloud Layers */}
+      {clouds.map(cloud => (
+        <div
+          key={cloud.id}
+          className="absolute transition-transform will-change-transform"
+          style={{
+            top: cloud.top,
+            left: "-300px",
+            opacity: cloud.opacity,
+            transform: `scale(${cloud.scale})`,
+            animation: `drift ${cloud.duration}s linear infinite`,
+            animationDelay: cloud.delay,
+            zIndex: cloud.layer
+          }}
+        >
+          <svg viewBox="0 0 240 90" width="240" height="90">
+            <path
+              d="M40 70 Q20 70 20 50 Q20 30 42 32 Q46 12 70 14 Q96 -2 116 16 Q140 10 150 30 Q176 28 180 50 Q200 50 200 66 Q200 78 184 78 L42 78 Q40 78 40 70Z"
+              fill={cloud.color}
+            />
+          </svg>
+        </div>
+      ))}
+
+      {/* 3. High Performance Canvas for rain / snow / stars / lightning */}
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+
+      {/* 4. Fog / Mist Blur Overlay */}
+      {skyType === "haze" && (
+        <div className="absolute inset-0 backdrop-blur-[3px] bg-white/5 pointer-events-none" />
+      )}
+    </div>
+  );
+};
+
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const [selectedCity, setSelectedCity] = useState<CityData>(CITIES_DB.istanbul);
@@ -442,14 +826,6 @@ export default function Home() {
   // YouTube videos state
   const [ytVideos, setYtVideos] = useState<{ title: string; videoId: string; thumbnail: string }[]>([]);
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
-
-  // Rain animation states
-  const [heroRainDrops, setHeroRainDrops] = useState<RainDrop[]>([]);
-  const [miniRainDrops1, setMiniRainDrops1] = useState<RainDrop[]>([]);
-  const [miniRainDrops2, setMiniRainDrops2] = useState<RainDrop[]>([]);
-  
-  // Star animation state for night sky
-  const [stars, setStars] = useState<{ left: string; top: string; size: string; delay: string; duration: string }[]>([]);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
@@ -538,50 +914,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [selectedCity]);
 
-  // Rain drop generation on client-side
-  useEffect(() => {
-    if (!isMounted) return;
 
-    // Generate main rain layer
-    const hero = Array.from({ length: 26 }, () => ({
-      left: `${Math.random() * 100}%`,
-      height: `${8 + Math.random() * 14}px`,
-      duration: `${(2.4 + Math.random() * 1.4).toFixed(2)}s`,
-      delay: `-${(Math.random() * 2.4).toFixed(2)}s`,
-      opacity: `${(0.3 + Math.random() * 0.4).toFixed(2)}`
-    }));
-    setHeroRainDrops(hero);
-
-    // Mini rain 1
-    const mini1 = Array.from({ length: 18 }, () => ({
-      left: `${Math.random() * 100}%`,
-      height: `${6 + Math.random() * 8}px`,
-      duration: `${(0.8 + Math.random() * 0.6).toFixed(2)}s`,
-      delay: `-${(Math.random() * 1.2).toFixed(2)}s`,
-      opacity: `${(0.4 + Math.random() * 0.4).toFixed(2)}`
-    }));
-    setMiniRainDrops1(mini1);
-
-    // Mini rain 2
-    const mini2 = Array.from({ length: 28 }, () => ({
-      left: `${Math.random() * 100}%`,
-      height: `${6 + Math.random() * 8}px`,
-      duration: `${(0.8 + Math.random() * 0.6).toFixed(2)}s`,
-      delay: `-${(Math.random() * 1.2).toFixed(2)}s`,
-      opacity: `${(0.4 + Math.random() * 0.4).toFixed(2)}`
-    }));
-    setMiniRainDrops2(mini2);
-
-    // Generate random stars for the night sky
-    const starList = Array.from({ length: 45 }, () => ({
-      left: `${Math.random() * 100}%`,
-      top: `${Math.random() * 65}%`,
-      size: `${1 + Math.random() * 1.5}px`,
-      delay: `${(Math.random() * 5).toFixed(2)}s`,
-      duration: `${(2 + Math.random() * 3).toFixed(2)}s`
-    }));
-    setStars(starList);
-  }, [isMounted]);
 
   // Search autocomplete suggestion list
   const filteredSuggestions = useMemo(() => {
@@ -1120,22 +1453,10 @@ export default function Home() {
   const localHour = getLocalHour();
 
   const isNight = localHour >= 19 || localHour < 6;
-  const isMorning = localHour >= 6 && localHour < 11;
-  const isRaining = selectedCity.skyType === "rain" || selectedCity.skyType === "heavy-rain";
-
-  // Dynamic cloud color based on weather and time of day
-  const getCloudColor = () => {
-    if (isRaining) return "rgba(30, 36, 46, 0.92)"; // Dark storm clouds
-    if (isNight) return "rgba(45, 55, 72, 0.65)"; // Dark night clouds
-    return "rgba(255, 255, 255, 0.85)"; // Bright day clouds
-  };
-  const cloudColor = getCloudColor();
 
   const activeGradient = isNight
     ? (nightGradients[selectedCity.skyType] || nightGradients.clear)
     : (skyGradients[selectedCity.skyType] || skyGradients.haze);
-
-  const isRainySky = selectedCity.skyType === "rain" || selectedCity.skyType === "heavy-rain";
 
   return (
     <>
@@ -1161,157 +1482,13 @@ export default function Home() {
         aria-label={`Current weather for ${selectedCity.city}, ${selectedCity.country}`}
       >
         <div className="absolute inset-0 pointer-events-none print:hidden" aria-hidden="true">
-          {/* Twinkling Stars (only visible at night) */}
-          {isNight && stars.map((star, idx) => (
-            <div
-              key={idx}
-              className="absolute rounded-full bg-white animate-twinkle"
-              style={{
-                left: star.left,
-                top: star.top,
-                width: star.size,
-                height: star.size,
-                animationDelay: star.delay,
-                animationDuration: star.duration
-              }}
-            />
-          ))}
-
-          {/* Sun (only visible in Clear, Haze, or Rain during day/morning) */}
-          {!isNight && (selectedCity.skyType === "clear" || selectedCity.skyType === "haze" || isRaining) && (
-            <div className="absolute top-[14%] left-1/2 -translate-x-1/2">
-              <div 
-                className={`w-[120px] h-[120px] rounded-full transition-all duration-1000 ${
-                  isMorning 
-                    ? "bg-gradient-to-br from-[#FFEBD0] via-[#F4C480] to-[#D89543] opacity-75 animate-sun-breathe-soft" 
-                    : "bg-gradient-to-br from-[#FFE7B8] via-[#E8B86D] to-[#C98C4A] animate-sun-breathe"
-                }`}
-              />
-            </div>
-          )}
-
-          {/* Moon (only visible at night) */}
-          {isNight && (
-            <div className="absolute top-[14%] left-1/2 -translate-x-1/2 flex items-center justify-center">
-              <div className="relative w-[110px] h-[110px] rounded-full bg-[#E5E9F0] animate-moon-glow flex items-center justify-center overflow-hidden">
-                {/* Moon craters */}
-                <div className="absolute top-[20%] left-[25%] w-[18px] h-[18px] rounded-full bg-black/10"></div>
-                <div className="absolute top-[50%] left-[60%] w-[24px] h-[24px] rounded-full bg-black/10"></div>
-                <div className="absolute top-[65%] left-[30%] w-[14px] h-[14px] rounded-full bg-black/10"></div>
-                <div className="absolute top-[30%] left-[70%] w-[12px] h-[12px] rounded-full bg-black/10"></div>
-              </div>
-            </div>
-          )}
-
-          {/* Clouds */}
-          {selectedCity.skyType !== "clear" && (
-            <>
-              {/* Extra storm clouds if it is raining */}
-              {isRaining && (
-                <>
-                  <div className="absolute opacity-90 top-[25%] left-0 w-[280px] animate-drift-3" style={{ animationDelay: "-35s" }}>
-                    <svg viewBox="0 0 240 90" width="280" height="105">
-                      <path 
-                        d="M40 70 Q20 70 20 50 Q20 30 42 32 Q46 12 70 14 Q96 -2 116 16 Q140 10 150 30 Q176 28 180 50 Q200 50 200 66 Q200 78 184 78 L42 78 Q40 78 40 70Z" 
-                        fill="rgba(18, 22, 30, 0.95)"
-                      />
-                    </svg>
-                  </div>
-                  <div className="absolute opacity-80 top-[15%] left-0 w-[210px] animate-drift-1" style={{ animationDelay: "-48s" }}>
-                    <svg viewBox="0 0 170 70" width="210" height="85">
-                      <path 
-                        d="M28 52 Q12 52 12 36 Q12 20 30 22 Q34 6 54 9 Q74 -4 90 10 Q110 6 116 22 Q136 22 138 38 Q150 38 150 50 Q150 58 138 58 L30 58 Q28 58 28 52Z" 
-                        fill="rgba(22, 28, 38, 0.9)"
-                      />
-                    </svg>
-                  </div>
-                </>
-              )}
-
-              {/* Standard clouds */}
-              <div className="absolute opacity-80 top-[18%] left-0 w-[240px] animate-drift-1" style={{ animationDelay: "-20s" }}>
-                <svg viewBox="0 0 240 90" width="240" height="90">
-                  <path 
-                    d="M40 70 Q20 70 20 50 Q20 30 42 32 Q46 12 70 14 Q96 -2 116 16 Q140 10 150 30 Q176 28 180 50 Q200 50 200 66 Q200 78 184 78 L42 78 Q40 78 40 70Z" 
-                    fill={cloudColor}
-                  />
-                </svg>
-              </div>
-              <div className="absolute opacity-65 top-[30%] left-0 w-[170px] animate-drift-2" style={{ animationDelay: "-55s" }}>
-                <svg viewBox="0 0 170 70" width="170" height="70">
-                  <path 
-                    d="M28 52 Q12 52 12 36 Q12 20 30 22 Q34 6 54 9 Q74 -4 90 10 Q110 6 116 22 Q136 22 138 38 Q150 38 150 50 Q150 58 138 58 L30 58 Q28 58 28 52Z" 
-                    fill={cloudColor}
-                  />
-                </svg>
-              </div>
-              <div className="absolute opacity-55 top-[10%] left-0 w-[130px] animate-drift-3" style={{ animationDelay: "-10s" }}>
-                <svg viewBox="0 0 130 55" width="130" height="55">
-                  <path 
-                    d="M22 40 Q10 40 10 28 Q10 16 24 17 Q27 5 42 7 Q57 -3 70 8 Q85 5 90 17 Q104 17 106 30 Q116 30 116 39 Q116 45 106 45 L23 45 Q22 45 22 40Z" 
-                    fill={cloudColor}
-                  />
-                </svg>
-              </div>
-              <div className="absolute opacity-45 top-[42%] left-0 w-[200px] animate-drift-4" style={{ animationDelay: "-80s" }}>
-                <svg viewBox="0 0 200 80" width="200" height="80">
-                  <path 
-                    d="M34 60 Q16 60 16 42 Q16 24 36 26 Q40 8 62 11 Q84 -3 102 13 Q124 7 132 26 Q154 25 158 44 Q172 44 172 56 Q172 66 158 66 L36 66 Q34 66 34 60Z" 
-                    fill={cloudColor}
-                  />
-                </svg>
-              </div>
-
-              {/* Middle-level clouds (starting from center/right of center on page load) */}
-              <div className="absolute opacity-60 top-[48%] left-0 w-[200px] animate-drift-2" style={{ animationDelay: "-30s" }}>
-                <svg viewBox="0 0 170 70" width="200" height="80">
-                  <path 
-                    d="M28 52 Q12 52 12 36 Q12 20 30 22 Q34 6 54 9 Q74 -4 90 10 Q110 6 116 22 Q136 22 138 38 Q150 38 150 50 Q150 58 138 58 L30 58 Q28 58 28 52Z" 
-                    fill={cloudColor}
-                  />
-                </svg>
-              </div>
-              <div className="absolute opacity-50 top-[56%] left-0 w-[260px] animate-drift-4" style={{ animationDelay: "-65s" }}>
-                <svg viewBox="0 0 240 90" width="260" height="98">
-                  <path 
-                    d="M40 70 Q20 70 20 50 Q20 30 42 32 Q46 12 70 14 Q96 -2 116 16 Q140 10 150 30 Q176 28 180 50 Q200 50 200 66 Q200 78 184 78 L42 78 Q40 78 40 70Z" 
-                    fill={cloudColor}
-                  />
-                </svg>
-              </div>
-            </>
-          )}
-
-          {/* Rain drops */}
-          {isRainySky && heroRainDrops.map((drop, idx) => (
-            <div
-              key={idx}
-              className="drop animate-fall"
-              style={{
-                left: drop.left,
-                height: drop.height,
-                animationDuration: drop.duration,
-                animationDelay: drop.delay,
-                opacity: drop.opacity
-              }}
-            />
-          ))}
-
-          {/* Heavy dense rain overlay */}
-          {selectedCity.skyType === "heavy-rain" && miniRainDrops1.map((drop, idx) => (
-            <div
-              key={`dense-${idx}`}
-              className="drop animate-fall"
-              style={{
-                left: drop.left,
-                height: `${parseFloat(drop.height) * 1.5}px`,
-                animationDuration: `${parseFloat(drop.duration) * 0.75}s`,
-                animationDelay: drop.delay,
-                opacity: (parseFloat(drop.opacity) * 1.25).toFixed(2),
-                width: "2px"
-              }}
-            />
-          ))}
+          <WeatherScene
+            skyType={selectedCity.skyType}
+            condition={selectedCity.condition}
+            temp={selectedCity.temp}
+            wind={selectedCity.wind}
+            localHour={localHour}
+          />
 
           {/* Skyline Silhouette */}
           <div className="absolute bottom-0 left-0 right-0 leading-[0]">
@@ -1511,7 +1688,16 @@ export default function Home() {
                   {/* Rain drops animation */}
                   {showRain && isMounted && (
                     <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden z-10" aria-hidden="true">
-                      {(i === 2 ? miniRainDrops1 : miniRainDrops2).map((drop, idx) => (
+                      {[
+                        { left: "10%", height: "8px", duration: "1.0s", delay: "-0.2s" },
+                        { left: "30%", height: "12px", duration: "0.8s", delay: "-0.5s" },
+                        { left: "50%", height: "7px", duration: "1.2s", delay: "-0.1s" },
+                        { left: "70%", height: "10px", duration: "0.9s", delay: "-0.7s" },
+                        { left: "90%", height: "6px", duration: "1.1s", delay: "-0.4s" },
+                        { left: "20%", height: "9px", duration: "0.9s", delay: "-0.3s" },
+                        { left: "60%", height: "11px", duration: "1.0s", delay: "-0.8s" },
+                        { left: "80%", height: "8px", duration: "0.7s", delay: "-0.6s" }
+                      ].map((drop, idx) => (
                         <div
                           key={idx}
                           className="mini-drop"
@@ -1520,7 +1706,7 @@ export default function Home() {
                             height: drop.height,
                             animationDuration: drop.duration,
                             animationDelay: drop.delay,
-                            opacity: drop.opacity
+                            opacity: "0.4"
                           }}
                         />
                       ))}
