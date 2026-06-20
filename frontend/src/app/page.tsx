@@ -1024,7 +1024,7 @@ export default function Home() {
     ? (nightGradients[selectedCity.skyType] || nightGradients.clear)
     : (skyGradients[selectedCity.skyType] || skyGradients.haze);
 
-  const isRainySky = selectedCity.skyType === "rain" || selectedCity.skyType === "heavy-rain" || selectedCity.skyType === "haze";
+  const isRainySky = selectedCity.skyType === "rain" || selectedCity.skyType === "heavy-rain";
 
   return (
     <>
