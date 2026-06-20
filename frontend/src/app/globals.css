@@ -139,32 +139,26 @@ body {
   }
 }
 
-.card-cloud-1, .card-cloud-2 {
+.card-cloud-svg-1, .card-cloud-svg-2 {
   position: absolute;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 50px;
-  filter: blur(12px);
   pointer-events: none;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.05));
 }
-.card-cloud-1 {
-  width: 110px;
-  height: 40px;
-  top: 15%;
-  animation: cardDrift 18s linear infinite;
+.card-cloud-svg-1 {
+  top: 12%;
+  animation: cardDrift 24s linear infinite;
 }
-.card-cloud-2 {
-  width: 140px;
-  height: 45px;
-  bottom: 15%;
-  animation: cardDrift 24s linear infinite reverse;
+.card-cloud-svg-2 {
+  bottom: 18%;
+  animation: cardDrift 32s linear infinite reverse;
 }
 
 @keyframes cardDrift {
   0% {
-    transform: translateX(-150px);
+    transform: translateX(-110px);
   }
   100% {
-    transform: translateX(250px);
+    transform: translateX(170px);
   }
 }
 

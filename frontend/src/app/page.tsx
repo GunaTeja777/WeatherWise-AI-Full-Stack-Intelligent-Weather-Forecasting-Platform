@@ -1393,7 +1393,11 @@ export default function Home() {
                 clear: "bg-gradient-to-br from-[#00c6ff] to-[#0072ff] text-white" // vibrant blue
               };
               const activeBg = bgGradients[f.skyType] || bgGradients.sun;
-              const isRain = f.skyType === "rain" || f.skyType === "heavy-rain";
+              
+              const showRain = f.skyType === "rain" || f.skyType === "heavy-rain";
+              const showSunSparkles = f.skyType === "clear" || f.skyType === "sun";
+              const showClouds = f.skyType === "cloud" || f.skyType === "sun" || f.skyType === "rain" || f.skyType === "heavy-rain";
+              const showLightning = f.skyType === "heavy-rain";
 
               return (
                 <div
@@ -1402,9 +1406,9 @@ export default function Home() {
                   role="listitem"
                   tabIndex={0}
                 >
-                  {/* Ambient climate animations inside cards */}
-                  {isRain && isMounted && (
-                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden" aria-hidden="true">
+                  {/* Rain drops animation */}
+                  {showRain && isMounted && (
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden z-10" aria-hidden="true">
                       {(i === 2 ? miniRainDrops1 : miniRainDrops2).map((drop, idx) => (
                         <div
                           key={idx}
@@ -1421,26 +1425,30 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Sunny & Clear sun sparkles animation */}
-                  {(f.skyType === "sun" || f.skyType === "clear") && isMounted && (
-                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden" aria-hidden="true">
+                  {/* Sun sparkles animation */}
+                  {showSunSparkles && isMounted && (
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden z-10" aria-hidden="true">
                       <div className="sun-sparkle" style={{ left: "15%", width: "10px", height: "10px", animationDelay: "0s", animationDuration: "4s" }} />
                       <div className="sun-sparkle" style={{ left: "45%", width: "7px", height: "7px", animationDelay: "1.2s", animationDuration: "5s" }} />
                       <div className="sun-sparkle" style={{ left: "75%", width: "12px", height: "12px", animationDelay: "2.5s", animationDuration: "3.5s" }} />
                     </div>
                   )}
 
-                  {/* Cloudy drifting soft clouds animation */}
-                  {f.skyType === "cloud" && isMounted && (
-                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden opacity-30" aria-hidden="true">
-                      <div className="card-cloud-1" style={{ animationDelay: "0s" }} />
-                      <div className="card-cloud-2" style={{ animationDelay: "2s" }} />
+                  {/* SVG Drifting Clouds animation */}
+                  {showClouds && isMounted && (
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden opacity-[0.11] z-10" aria-hidden="true">
+                      <svg viewBox="0 0 100 60" className="card-cloud-svg-1 absolute w-[60px] h-auto text-white fill-current">
+                        <path d="M20 45h60 a15 15 0 0 0 0-30 a14.8 14.8 0 0 0-3.3.4 A25 25 0 0 0 30 20 a24.8 24.8 0 0 0 .5 5 A18 18 0 0 0 20 45 z" />
+                      </svg>
+                      <svg viewBox="0 0 100 60" className="card-cloud-svg-2 absolute w-[80px] h-auto text-white fill-current">
+                        <path d="M20 45h60 a15 15 0 0 0 0-30 a14.8 14.8 0 0 0-3.3.4 A25 25 0 0 0 30 20 a24.8 24.8 0 0 0 .5 5 A18 18 0 0 0 20 45 z" />
+                      </svg>
                     </div>
                   )}
 
                   {/* Storm lightning flash animation */}
-                  {f.skyType === "heavy-rain" && isMounted && (
-                    <div className="lightning-flash" />
+                  {showLightning && isMounted && (
+                    <div className="lightning-flash z-10" />
                   )}
 
                   <div className="flex items-center justify-between w-full relative z-20">
