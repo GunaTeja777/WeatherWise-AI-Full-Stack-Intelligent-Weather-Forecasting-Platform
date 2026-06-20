@@ -66,12 +66,12 @@ const DEFAULT_PLACES = [
 
 const CATEGORY_IMAGES: Record<string, string> = {
   beach: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300&h=220&fit=crop",
-  temple: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=300&h=220&fit=crop",
+  temple: "https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?w=300&h=220&fit=crop",
   nature: "https://images.unsplash.com/photo-1448375240586-882707db888b?w=300&h=220&fit=crop",
   park: "https://images.unsplash.com/photo-1519331379826-f10be5486c6f?w=300&h=220&fit=crop",
   museum: "https://images.unsplash.com/photo-1597923890187-ad3eb3017266?w=300&h=220&fit=crop",
   market: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=300&h=220&fit=crop",
-  monument: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=300&h=220&fit=crop",
+  monument: "https://images.unsplash.com/photo-1564507592333-c60657eea523?w=300&h=220&fit=crop",
   harbor: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=300&h=220&fit=crop",
   food: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=300&h=220&fit=crop",
   city: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=300&h=220&fit=crop",
@@ -398,22 +398,68 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
             const attractionName = p.name || 'Local Attraction';
             let imgUrl = '';
             
-            // Try fetching from Wikipedia API
+            // 1. Try fetching from Wikipedia using dynamic Search first
             try {
-              const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(attractionName)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
-              const wikiRes = await axios.get(wikiUrl);
-              const pages = wikiRes.data?.query?.pages;
-              if (pages) {
-                const pageId = Object.keys(pages)[0];
-                if (pageId && pages[pageId]?.thumbnail?.source) {
-                  imgUrl = pages[pageId].thumbnail.source;
+              const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(attractionName + ' ' + name)}&utf8=&format=json&origin=*`;
+              const searchRes = await axios.get(searchUrl, {
+                headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' }
+              });
+              const searchResults = searchRes.data?.query?.search;
+              
+              if (searchResults && searchResults.length > 0) {
+                const pageTitle = searchResults[0].title;
+                
+                // Heuristic: Ensure the page title shares at least one meaningful word with the attraction name
+                const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+                const attractionWords = normalize(attractionName).filter(w => w !== name.toLowerCase() && w.length > 2);
+                const titleWords = normalize(pageTitle);
+                const hasKeywordMatch = attractionWords.length === 0 || attractionWords.some(w => titleWords.includes(w));
+
+                if (pageTitle.toLowerCase().trim() === name.toLowerCase().trim()) {
+                  console.log(`[Wikipedia Search] Skipped generic city page "${pageTitle}" for attraction "${attractionName}"`);
+                } else if (!hasKeywordMatch) {
+                  console.log(`[Wikipedia Search] Skipped mismatched page "${pageTitle}" for attraction "${attractionName}" (no keyword match)`);
+                } else {
+                  const imgInfoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
+                  const imgInfoRes = await axios.get(imgInfoUrl, {
+                    headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' }
+                  });
+                  const pages = imgInfoRes.data?.query?.pages;
+                  if (pages) {
+                    const pageId = Object.keys(pages)[0];
+                    if (pageId && pages[pageId]?.thumbnail?.source) {
+                      imgUrl = pages[pageId].thumbnail.source;
+                    }
+                  }
                 }
               }
             } catch (err: any) {
-              console.warn(`[Wikipedia Image API] Failed for "${attractionName}":`, err.message);
+              console.warn(`[Wikipedia Search Image API] Failed for "${attractionName}":`, err.message);
             }
 
-            // Fallback to generic category-based Unsplash photo if Wikipedia is unavailable or missing image
+            // 2. Fallback to Wikimedia Commons search if Wikipedia search had no image
+            if (!imgUrl) {
+              try {
+                const commonsUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(attractionName + ' ' + name)}&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`;
+                const commonsRes = await axios.get(commonsUrl, {
+                  headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' }
+                });
+                const pages = commonsRes.data?.query?.pages;
+                if (pages) {
+                  const firstPageId = Object.keys(pages)[0];
+                  const imgInfo = pages[firstPageId]?.imageinfo?.[0];
+                  if (imgInfo?.thumburl) {
+                    imgUrl = imgInfo.thumburl;
+                  } else if (imgInfo?.url) {
+                    imgUrl = imgInfo.url;
+                  }
+                }
+              } catch (err: any) {
+                console.warn(`[Wikimedia Commons API] Failed for "${attractionName}":`, err.message);
+              }
+            }
+
+            // 3. Fallback to generic category-based photo if all else fails
             if (!imgUrl) {
               const cat = (p.category || 'city').toLowerCase().trim();
               imgUrl = CATEGORY_IMAGES[cat] || CATEGORY_IMAGES.city;

@@ -787,7 +787,10 @@ const WeatherScene: React.FC<WeatherSceneProps> = ({
             left: "-300px",
             opacity: cloud.opacity,
             transform: `scale(${cloud.scale})`,
-            animation: `drift ${cloud.duration}s linear infinite`,
+            animationName: "drift",
+            animationDuration: `${cloud.duration}s`,
+            animationTimingFunction: "linear",
+            animationIterationCount: "infinite",
             animationDelay: cloud.delay,
             zIndex: cloud.layer
           }}
@@ -1041,6 +1044,21 @@ export default function Home() {
     const startTime = Date.now();
 
     try {
+      // Try to fetch from backend first to get dynamic AI and real weather/images
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/weather?city=${encodeURIComponent(cityName)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSelectedCity(data);
+          setSearchQuery(data.city);
+          setShowSuggestions(false);
+          setIsLoadingWeather(false);
+          return;
+        }
+      } catch (backendErr) {
+        console.warn("Backend fetch failed, trying local pre-configured DB:", backendErr);
+      }
+
       // Check if it is a local pre-configured city
       if (CITIES_DB[key]) {
         setSelectedCity(CITIES_DB[key]);
@@ -1208,23 +1226,20 @@ export default function Home() {
     const key = modalCity.toLowerCase().trim();
     
     // First, try fetching the weather details for this city to set swatches
-    let weatherRef = CITIES_DB[key];
-    if (!weatherRef) {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/weather?city=${encodeURIComponent(modalCity)}`);
-        if (res.ok) {
-          weatherRef = await res.json();
-        } else {
-          const errData = await res.json();
-          setModalError(errData.error || `City "${modalCity}" not found.`);
-          setModalSaving(false);
-          return;
-        }
-      } catch (err) {
-        console.warn("Could not fetch city weather from API, generating fallback", err);
+    let weatherRef = null;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/weather?city=${encodeURIComponent(modalCity)}`);
+      if (res.ok) {
+        weatherRef = await res.json();
       }
+    } catch (err) {
+      console.warn("Could not fetch city weather from API, checking local pre-configured DB", err);
     }
-    
+
+    if (!weatherRef) {
+      weatherRef = CITIES_DB[key];
+    }
+
     if (!weatherRef) {
       weatherRef = generateCityData(modalCity);
     }
@@ -1243,7 +1258,7 @@ export default function Home() {
       rain: "linear-gradient(160deg,#445566,#222E38)",
       "heavy-rain": "linear-gradient(160deg,#37424C,#161E25)"
     };
-    const gradient = gradientMap[weatherRef.skyType] || "linear-gradient(160deg,#5C87A8,#2E4863)";
+    const gradient = gradientMap[weatherRef.skyType as keyof typeof gradientMap] || "linear-gradient(160deg,#5C87A8,#2E4863)";
 
     if (editingTripId) {
       const updated = trips.map(t => {
@@ -2144,86 +2159,94 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-6 max-md:grid-cols-1">
-            {getRankedPlaces().map((place, idx) => {
-              const badgeColors =
-                place.suitability >= 90
-                  ? "text-emerald-600"
-                  : place.suitability >= 70
-                  ? "text-amber-600"
-                  : "text-rose-600";
+          {getRankedPlaces().length === 0 ? (
+            <div className="text-center py-14 bg-white/40 backdrop-blur-lg border border-white/20 rounded-[24px] shadow-[0_4px_20px_rgba(0,0,0,0.015)]">
+              <span className="text-3xl block mb-2" role="img" aria-label="pin">📍</span>
+              <p className="font-body text-[0.92rem] text-slate font-medium">No major tourist attractions found for this location.</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap justify-center gap-6">
+              {getRankedPlaces().map((place, idx) => {
+                const badgeColors =
+                  place.suitability >= 90
+                    ? "text-emerald-600"
+                    : place.suitability >= 70
+                    ? "text-amber-600"
+                    : "text-rose-600";
 
-              return (
-                <div
-                  key={idx}
-                  className="bg-white/60 backdrop-blur-lg border border-white/30 rounded-[20px] overflow-hidden flex flex-col justify-between shadow-[0_4px_20px_rgba(0,0,0,0.015)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_12px_30px_rgba(0,0,0,0.05)] group"
-                >
-                  <div className="relative w-full aspect-[16/10] overflow-hidden bg-slate/10">
-                    <Image
-                      src={place.image.replace("w=300&h=220", "w=450&h=300")}
-                      alt={place.name}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 350px"
-                      className="w-full h-full object-cover block transition-transform duration-500 ease-out group-hover:scale-105"
-                    />
-                    {/* Glassmorphic suitability score badge */}
-                    <div className="absolute top-3 left-3">
-                      <span className={`px-3 py-1 rounded-full text-[0.72rem] font-bold bg-white/85 backdrop-blur-md shadow-sm border border-white/50 ${badgeColors}`}>
-                        {place.suitability}% Suitability
-                      </span>
+                return (
+                  <div
+                    key={idx}
+                    className="w-full md:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] bg-white/60 backdrop-blur-lg border border-white/30 rounded-[20px] overflow-hidden flex flex-col justify-between shadow-[0_4px_20px_rgba(0,0,0,0.015)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_12px_30px_rgba(0,0,0,0.05)] group"
+                  >
+                    <div className="relative w-full aspect-[16/10] overflow-hidden bg-slate/10">
+                      <Image
+                        src={place.image.replace("w=300&h=220", "w=450&h=300")}
+                        alt={place.name}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 350px"
+                        className="w-full h-full object-cover block transition-transform duration-500 ease-out group-hover:scale-105"
+                        unoptimized
+                      />
+                      {/* Glassmorphic suitability score badge */}
+                      <div className="absolute top-3 left-3">
+                        <span className={`px-3 py-1 rounded-full text-[0.72rem] font-bold bg-white/85 backdrop-blur-md shadow-sm border border-white/50 ${badgeColors}`}>
+                          {place.suitability}% Suitability
+                        </span>
+                      </div>
+                      {/* Glassmorphic temperature and small weather icon overlay */}
+                      <div className="absolute top-3 right-3">
+                        <span className="bg-black/45 backdrop-blur-md text-white text-[0.72rem] font-semibold px-2.5 py-1.5 rounded-full border border-white/10 shadow-sm flex items-center gap-1.5">
+                          {place.weather === "Sunny" && (
+                            <svg className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300 animate-pulse" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="5" />
+                              <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+                              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                              <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+                              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                            </svg>
+                          )}
+                          {place.weather === "Cloudy" && (
+                            <svg className="w-3.5 h-3.5 text-slate-200 fill-slate-200" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+                            </svg>
+                          )}
+                          {place.weather === "Rainy" && (
+                            <svg className="w-3.5 h-3.5 text-blue-300 fill-blue-300/30" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25" />
+                              <path d="M8 19v2M12 19v2M16 19v2" />
+                            </svg>
+                          )}
+                          {place.temp}°C
+                        </span>
+                      </div>
                     </div>
-                    {/* Glassmorphic temperature and small weather icon overlay */}
-                    <div className="absolute top-3 right-3">
-                      <span className="bg-black/45 backdrop-blur-md text-white text-[0.72rem] font-semibold px-2.5 py-1.5 rounded-full border border-white/10 shadow-sm flex items-center gap-1.5">
-                        {place.weather === "Sunny" && (
-                          <svg className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300 animate-pulse" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="5" />
-                            <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                            <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                          </svg>
-                        )}
-                        {place.weather === "Cloudy" && (
-                          <svg className="w-3.5 h-3.5 text-slate-200 fill-slate-200" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
-                          </svg>
-                        )}
-                        {place.weather === "Rainy" && (
-                          <svg className="w-3.5 h-3.5 text-blue-300 fill-blue-300/30" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25" />
-                            <path d="M8 19v2M12 19v2M16 19v2" />
-                          </svg>
-                        )}
-                        {place.temp}°C
-                      </span>
+
+                    <div className="p-5 flex-1 flex flex-col justify-between">
+                      <div>
+                        <h3 className="font-display text-[1.12rem] font-semibold text-ink mb-1 group-hover:text-gold-deep transition-colors">
+                          {place.name}
+                        </h3>
+                        <span className="text-[0.62rem] font-bold text-slate/50 uppercase tracking-wider mb-2 block">
+                          AI Recommendation
+                        </span>
+                        <p className="font-body text-[0.88rem] text-slate leading-relaxed mb-5">
+                          {place.recommendation}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => setSelectedPlace(place)}
+                        className="w-full py-2 bg-ink text-paper hover:bg-[#2B333D] rounded-xl font-semibold text-[0.82rem] text-center transition-all duration-200 shadow-sm hover:shadow border-none cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        View Weather Details
+                      </button>
                     </div>
                   </div>
-
-                  <div className="p-5 flex-1 flex flex-col justify-between">
-                    <div>
-                      <h3 className="font-display text-[1.12rem] font-semibold text-ink mb-1 group-hover:text-gold-deep transition-colors">
-                        {place.name}
-                      </h3>
-                      <span className="text-[0.62rem] font-bold text-slate/50 uppercase tracking-wider mb-2 block">
-                        AI Recommendation
-                      </span>
-                      <p className="font-body text-[0.88rem] text-slate leading-relaxed mb-5">
-                        {place.recommendation}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => setSelectedPlace(place)}
-                      className="w-full py-2 bg-ink text-paper hover:bg-[#2B333D] rounded-xl font-semibold text-[0.82rem] text-center transition-all duration-200 shadow-sm hover:shadow border-none cursor-pointer flex items-center justify-center gap-1"
-                    >
-                      View Weather Details
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <hr className="border-none border-t border-card-line mb-14" />
