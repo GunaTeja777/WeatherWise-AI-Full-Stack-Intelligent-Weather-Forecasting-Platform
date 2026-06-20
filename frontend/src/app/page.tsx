@@ -983,6 +983,74 @@ export default function Home() {
     }
   };
 
+  // Helper to dynamically calculate weather suitability and rank attractions
+  const getRankedPlaces = () => {
+    const places = selectedCity.places || [];
+    const skyType = selectedCity.skyType as string;
+    const temp = selectedCity.temp;
+
+    return places.map(place => {
+      let suitability = 75; // baseline
+      let recommendation = "";
+      let placeWeather = "";
+      const placeTemp = temp; // approx same as city temp
+
+      const nameLower = place.name.toLowerCase();
+      const isBeach = nameLower.includes("beach") || nameLower.includes("coast") || nameLower.includes("lake");
+      const isOutdoor = nameLower.includes("park") || nameLower.includes("sanctuary") || nameLower.includes("forest") || nameLower.includes("garden") || nameLower.includes("tower") || nameLower.includes("temple") || nameLower.includes("kirkja");
+      const isIndoor = nameLower.includes("museum") || nameLower.includes("hall") || nameLower.includes("gallery") || nameLower.includes("dome");
+
+      if (skyType === "clear" || skyType === "sun") {
+        placeWeather = "Sunny & Clear";
+        if (isBeach) {
+          suitability = 98;
+          recommendation = "Perfect sunny day for beach activities and coastal walks!";
+        } else if (isOutdoor) {
+          suitability = 94;
+          recommendation = "Excellent clear conditions for hiking and exploring nature.";
+        } else {
+          suitability = 85;
+          recommendation = "Pleasant weather to visit this destination today.";
+        }
+      } else if (skyType === "cloud" || skyType === "overcast" || skyType === "haze") {
+        placeWeather = "Partly Cloudy";
+        if (isOutdoor) {
+          suitability = 88;
+          recommendation = "Mild overcast sky makes it great for outdoor walking without direct sun heat.";
+        } else if (isIndoor) {
+          suitability = 85;
+          recommendation = "Good day to visit and explore the exhibits.";
+        } else {
+          suitability = 80;
+          recommendation = "Comfortable conditions for visiting today.";
+        }
+      } else { // rain or heavy-rain
+        placeWeather = "Rainy & Stormy";
+        if (isIndoor) {
+          suitability = 92;
+          recommendation = "Highly recommended! Stay warm and dry indoors while enjoying local culture.";
+        } else if (isBeach) {
+          suitability = 25;
+          recommendation = "Not recommended today due to heavy precipitation and coastal winds.";
+        } else if (isOutdoor) {
+          suitability = 35;
+          recommendation = "Expect wet pathways and rain showers. Carry an umbrella if visiting.";
+        } else {
+          suitability = 55;
+          recommendation = "Indoor parts are open; bring rain gear if walking outside.";
+        }
+      }
+
+      return {
+        ...place,
+        suitability,
+        recommendation,
+        weather: placeWeather,
+        temp: placeTemp
+      };
+    }).sort((a, b) => b.suitability - a.suitability); // Rank by suitability!
+  };
+
   // Dynamic sky styles
   const skyGradients = {
     haze: "linear-gradient(180deg,#3A5470 0%,#26384C 38%,#172430 68%,#0E1620 100%)",
@@ -1591,40 +1659,11 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Worth your time nearby */}
-            <div className="bg-card border border-card-line rounded-[18px] p-[1.4rem_1.5rem] flex flex-col justify-between max-md:col-span-1">
-              <div>
-                <div className="font-body text-[0.78rem] font-semibold uppercase tracking-[0.06em] text-slate mb-[0.7rem]">Worth your time nearby</div>
-                <div className="grid grid-cols-3 gap-[0.5rem] mt-[0.9rem]" role="list" aria-label={`Places to visit in ${selectedCity.city}`}>
-                  {selectedCity.places.slice(0, 3).map((place, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setSelectedPlace(place)}
-                      className="aspect-[4/3] rounded-[12px] relative overflow-hidden cursor-pointer border-none p-0 group focus-visible:outline-2 focus-visible:outline-gold-deep focus-visible:outline-offset-2"
-                      role="listitem"
-                      aria-label={place.name}
-                    >
-                      <Image
-                        src={place.image}
-                        alt={place.name}
-                        fill
-                        sizes="(max-width: 768px) 33vw, 120px"
-                        className="w-full h-full object-cover block transition-transform duration-450 ease-out group-hover:scale-106"
-                      />
-                      <span className="absolute bottom-0 left-0 right-0 p-[0.4rem_0.5rem_0.3rem] bg-gradient-to-t from-black/75 to-transparent font-body text-[0.68rem] font-semibold text-white text-left leading-tight">
-                        {place.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
             {/* Google Map Card */}
-            <div className="bg-card border border-card-line rounded-[18px] p-[1.4rem_1.5rem] flex flex-col justify-between max-md:col-span-1">
+            <div className="bg-card border border-card-line rounded-[18px] p-[1.4rem_1.5rem] flex flex-col justify-between col-span-2 max-md:col-span-1">
               <div>
                 <div className="font-body text-[0.78rem] font-semibold uppercase tracking-[0.06em] text-slate mb-[0.7rem]">Interactive Map</div>
-                <div className="rounded-[12px] overflow-hidden border border-card-line bg-[#E5E3DF] relative h-[105px] w-full">
+                <div className="rounded-[12px] overflow-hidden border border-card-line bg-[#E5E3DF] relative h-[140px] w-full">
                   <iframe
                     width="100%"
                     height="100%"
@@ -1671,6 +1710,81 @@ export default function Home() {
                 </div>
               </div>
             )}
+          </div>
+        </section>
+
+        <hr className="border-none border-t border-card-line mb-14" />
+
+        {/* Worth Visiting Today - Ranked Attractions */}
+        <section aria-labelledby="worth-visiting-heading" className="mb-14">
+          <div className="flex items-baseline justify-between mb-6 flex-wrap gap-2">
+            <h2 className="font-display text-[1.4rem] font-medium text-ink" id="worth-visiting-heading">
+              Worth Visiting Today
+            </h2>
+            <span className="font-body text-[0.82rem] text-slate">
+              Weather intelligence ranked attractions for {selectedCity.city}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-6 max-md:grid-cols-1">
+            {getRankedPlaces().map((place, idx) => {
+              const badgeColors =
+                place.suitability >= 90
+                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                  : place.suitability >= 70
+                  ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                  : "bg-rose-500/10 text-rose-600 border-rose-500/20";
+
+              return (
+                <div
+                  key={idx}
+                  className="bg-card border border-card-line rounded-[24px] overflow-hidden flex flex-col justify-between shadow-md transition-all duration-300 hover:-translate-y-[6px] hover:shadow-xl group"
+                >
+                  <div className="relative w-full aspect-[16/10] overflow-hidden bg-slate/10">
+                    <Image
+                      src={place.image.replace("w=300&h=220", "w=450&h=300")}
+                      alt={place.name}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 350px"
+                      className="w-full h-full object-cover block transition-transform duration-500 ease-out group-hover:scale-105"
+                    />
+                    {/* Suitability score badge */}
+                    <div className="absolute top-3 left-3">
+                      <span className={`px-2.5 py-1 rounded-full text-[0.72rem] font-bold border backdrop-blur-md shadow-sm ${badgeColors}`}>
+                        {place.suitability}% Match
+                      </span>
+                    </div>
+                    {/* Location Current weather condition info */}
+                    <div className="absolute top-3 right-3">
+                      <span className="bg-black/60 backdrop-blur-md text-white text-[0.72rem] font-semibold px-2.5 py-1 rounded-full border border-white/10 shadow-sm">
+                        {place.weather} · {place.temp}°C
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-display text-[1.15rem] font-semibold text-ink mb-2 group-hover:text-gold-deep transition-colors">
+                        {place.name}
+                      </h3>
+                      <span className="text-[0.65rem] font-bold text-slate uppercase tracking-wider mb-1 block">
+                        AI Suitability Note
+                      </span>
+                      <p className="font-body text-[0.88rem] text-slate/80 leading-relaxed mb-5">
+                        {place.recommendation}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setSelectedPlace(place)}
+                      className="w-full py-2.5 bg-ink text-paper hover:bg-[#2B333D] rounded-xl font-semibold text-[0.85rem] text-center transition-all duration-200 shadow-sm hover:shadow flex items-center justify-center gap-1.5 border-none cursor-pointer"
+                    >
+                      View Weather Details
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
 
