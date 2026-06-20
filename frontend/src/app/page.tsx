@@ -1402,7 +1402,7 @@ export default function Home() {
                   role="listitem"
                   tabIndex={0}
                 >
-                  {/* Mini animated rain drops inside cards */}
+                  {/* Ambient climate animations inside cards */}
                   {isRain && isMounted && (
                     <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden" aria-hidden="true">
                       {(i === 2 ? miniRainDrops1 : miniRainDrops2).map((drop, idx) => (
@@ -1421,36 +1421,60 @@ export default function Home() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between w-full">
+                  {/* Sunny & Clear sun sparkles animation */}
+                  {(f.skyType === "sun" || f.skyType === "clear") && isMounted && (
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden" aria-hidden="true">
+                      <div className="sun-sparkle" style={{ left: "15%", width: "10px", height: "10px", animationDelay: "0s", animationDuration: "4s" }} />
+                      <div className="sun-sparkle" style={{ left: "45%", width: "7px", height: "7px", animationDelay: "1.2s", animationDuration: "5s" }} />
+                      <div className="sun-sparkle" style={{ left: "75%", width: "12px", height: "12px", animationDelay: "2.5s", animationDuration: "3.5s" }} />
+                    </div>
+                  )}
+
+                  {/* Cloudy drifting soft clouds animation */}
+                  {f.skyType === "cloud" && isMounted && (
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden opacity-30" aria-hidden="true">
+                      <div className="card-cloud-1" style={{ animationDelay: "0s" }} />
+                      <div className="card-cloud-2" style={{ animationDelay: "2s" }} />
+                    </div>
+                  )}
+
+                  {/* Storm lightning flash animation */}
+                  {f.skyType === "heavy-rain" && isMounted && (
+                    <div className="lightning-flash" />
+                  )}
+
+                  <div className="flex items-center justify-between w-full relative z-20">
                     <div className="font-body text-[0.8rem] font-bold text-white/90 uppercase tracking-[0.06em] print:text-slate">
                       {i === 0 ? "Today" : f.day}
                     </div>
-                    {i === 0 && (
-                      <span className="bg-white/20 backdrop-blur-md text-gold text-[0.55rem] font-extrabold uppercase px-2 py-0.5 rounded-full border border-white/20 tracking-wider shadow-sm animate-pulse">
-                        Active
+                    
+                    <div className="flex items-center gap-2">
+                      {i === 0 && (
+                        <span className="bg-white/20 backdrop-blur-md text-gold text-[0.55rem] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-white/20 tracking-wider shadow-sm animate-pulse">
+                          Active
+                        </span>
+                      )}
+                      <span className="w-8 h-8 rounded-full bg-white/12 backdrop-blur-md border border-white/10 flex items-center justify-center shadow-inner print:border-none print:bg-none" aria-hidden="true">
+                        {f.skyType === "sun" && (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="2"><circle cx="12" cy="12" r="4" fill="#FBE3B0" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                        )}
+                        {f.skyType === "cloud" && (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E7ECEF" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#E7ECEF" /></svg>
+                        )}
+                        {f.skyType === "rain" && (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#CFE0EC" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#CFE0EC" /><path d="M7 21l-1 2M11 21l-1 2M15 21l-1 2" /></svg>
+                        )}
+                        {f.skyType === "heavy-rain" && (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BFD2E0" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#BFD2E0" /><path d="M7 21l-1 2M11 21l-1 2M15 21l-1 2M12 2v2" /></svg>
+                        )}
+                        {f.skyType === "clear" && (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="2"><circle cx="12" cy="12" r="4" fill="#FBE3B0" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                        )}
                       </span>
-                    )}
+                    </div>
                   </div>
-                  
-                  <span className="absolute top-[1.2rem] right-[1.2rem] w-8 h-8 rounded-full bg-white/12 backdrop-blur-md border border-white/10 flex items-center justify-center shadow-inner print:border-none print:bg-none" aria-hidden="true">
-                    {f.skyType === "sun" && (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="2"><circle cx="12" cy="12" r="4" fill="#FBE3B0" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-                    )}
-                    {f.skyType === "cloud" && (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E7ECEF" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#E7ECEF" /></svg>
-                    )}
-                    {f.skyType === "rain" && (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#CFE0EC" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#CFE0EC" /><path d="M7 21l-1 2M11 21l-1 2M15 21l-1 2" /></svg>
-                    )}
-                    {f.skyType === "heavy-rain" && (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BFD2E0" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#BFD2E0" /><path d="M7 21l-1 2M11 21l-1 2M15 21l-1 2M12 2v2" /></svg>
-                    )}
-                    {f.skyType === "clear" && (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="2"><circle cx="12" cy="12" r="4" fill="#FBE3B0" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-                    )}
-                  </span>
 
-                  <div>
+                  <div className="relative z-20">
                     <div className="flex items-baseline gap-[0.4rem] mt-[0.6rem] print:text-ink">
                       <div className="flex flex-col">
                         <span className="text-[0.55rem] font-bold uppercase tracking-wider text-white/40 leading-none">High</span>
