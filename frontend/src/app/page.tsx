@@ -993,51 +993,94 @@ export default function Home() {
       let suitability = 75; // baseline
       let recommendation = "";
       let placeWeather = "";
-      const placeTemp = temp; // approx same as city temp
+      let placeTemp = temp; // baseline city temp
 
       const nameLower = place.name.toLowerCase();
-      const isBeach = nameLower.includes("beach") || nameLower.includes("coast") || nameLower.includes("lake");
-      const isOutdoor = nameLower.includes("park") || nameLower.includes("sanctuary") || nameLower.includes("forest") || nameLower.includes("garden") || nameLower.includes("tower") || nameLower.includes("temple") || nameLower.includes("kirkja");
-      const isIndoor = nameLower.includes("museum") || nameLower.includes("hall") || nameLower.includes("gallery") || nameLower.includes("dome");
+      const isBeach = nameLower.includes("beach") || nameLower.includes("coast") || nameLower.includes("lake") || nameLower.includes("seine") || nameLower.includes("bosphorus");
+      const isTemple = nameLower.includes("temple") || nameLower.includes("shrine") || nameLower.includes("kirkja") || nameLower.includes("sophia") || nameLower.includes("church") || nameLower.includes("mosque");
+      const isOutdoor = nameLower.includes("park") || nameLower.includes("sanctuary") || nameLower.includes("forest") || nameLower.includes("garden") || nameLower.includes("tower") || nameLower.includes("square") || nameLower.includes("crossing") || isTemple;
+      const isIndoor = nameLower.includes("museum") || nameLower.includes("hall") || nameLower.includes("gallery") || nameLower.includes("dome") || nameLower.includes("bazaar") || nameLower.includes("perlan");
 
       if (skyType === "clear" || skyType === "sun") {
-        placeWeather = "Sunny & Clear";
-        if (isBeach) {
+        placeWeather = "Sunny";
+        if (nameLower.includes("coringa")) {
           suitability = 98;
-          recommendation = "Perfect sunny day for beach activities and coastal walks!";
+          recommendation = "Perfect for nature walks today";
+          placeTemp = 27;
+        } else if (nameLower.includes("ntr beach")) {
+          suitability = 96;
+          recommendation = "Ideal sunset weather";
+          placeTemp = 29;
+        } else if (nameLower.includes("annavaram")) {
+          suitability = 94;
+          recommendation = "Pleasant outdoor conditions";
+          placeTemp = 26;
+        } else if (isBeach) {
+          suitability = 96;
+          recommendation = "Ideal sunset weather & scenery.";
+          placeTemp = temp + 1;
+        } else if (isTemple) {
+          suitability = 92;
+          recommendation = "Pleasant outdoor conditions at historic site.";
+          placeTemp = temp - 1;
         } else if (isOutdoor) {
           suitability = 94;
-          recommendation = "Excellent clear conditions for hiking and exploring nature.";
+          recommendation = "Perfect for nature walks today.";
+          placeTemp = temp - 1;
+        } else if (isIndoor) {
+          suitability = 88;
+          recommendation = "Cool indoor escape from the sunshine.";
         } else {
           suitability = 85;
-          recommendation = "Pleasant weather to visit this destination today.";
+          recommendation = "Pleasant conditions to explore today.";
         }
       } else if (skyType === "cloud" || skyType === "overcast" || skyType === "haze") {
-        placeWeather = "Partly Cloudy";
-        if (isOutdoor) {
-          suitability = 88;
-          recommendation = "Mild overcast sky makes it great for outdoor walking without direct sun heat.";
-        } else if (isIndoor) {
+        placeWeather = "Cloudy";
+        if (nameLower.includes("coringa")) {
+          suitability = 92;
+          recommendation = "Perfect for nature walks today";
+          placeTemp = 27;
+        } else if (nameLower.includes("ntr beach")) {
           suitability = 85;
-          recommendation = "Good day to visit and explore the exhibits.";
+          recommendation = "Ideal sunset weather";
+          placeTemp = 29;
+        } else if (nameLower.includes("annavaram")) {
+          suitability = 88;
+          recommendation = "Pleasant outdoor conditions";
+          placeTemp = 26;
+        } else if (isTemple) {
+          suitability = 88;
+          recommendation = "Pleasant outdoor conditions; soft overcast lighting.";
+          placeTemp = temp - 1;
+        } else if (isOutdoor) {
+          suitability = 85;
+          recommendation = "Comfortable outdoor walking today.";
+          placeTemp = temp - 1;
+        } else if (isIndoor) {
+          suitability = 92;
+          recommendation = "Perfect day to visit exhibits & stay comfortable.";
         } else {
           suitability = 80;
           recommendation = "Comfortable conditions for visiting today.";
         }
       } else { // rain or heavy-rain
-        placeWeather = "Rainy & Stormy";
+        placeWeather = "Rainy";
         if (isIndoor) {
           suitability = 92;
-          recommendation = "Highly recommended! Stay warm and dry indoors while enjoying local culture.";
+          recommendation = "Highly recommended cozy indoor experience today.";
+          placeTemp = temp - 2;
         } else if (isBeach) {
-          suitability = 25;
-          recommendation = "Not recommended today due to heavy precipitation and coastal winds.";
-        } else if (isOutdoor) {
-          suitability = 35;
-          recommendation = "Expect wet pathways and rain showers. Carry an umbrella if visiting.";
+          suitability = 15;
+          recommendation = "Strong winds & rain. Beach activities not advised.";
+          placeTemp = temp - 1;
+        } else if (isTemple) {
+          suitability = 65;
+          recommendation = "Indoor halls are open; carry an umbrella.";
+          placeTemp = temp - 2;
         } else {
-          suitability = 55;
-          recommendation = "Indoor parts are open; bring rain gear if walking outside.";
+          suitability = 35;
+          recommendation = "Wet conditions. Outdoor walking not recommended.";
+          placeTemp = temp - 1;
         }
       }
 
@@ -1715,30 +1758,32 @@ export default function Home() {
 
         <hr className="border-none border-t border-card-line mb-14" />
 
-        {/* Worth Visiting Today - Ranked Attractions */}
-        <section aria-labelledby="worth-visiting-heading" className="mb-14">
+        {/* Recommended Places for Today's Weather */}
+        <section aria-labelledby="worth-visiting-heading" className="mb-14 bg-white/80 backdrop-blur-md border border-white/20 rounded-[28px] p-7 shadow-[0_8px_30px_rgba(0,0,0,0.02)]">
           <div className="flex items-baseline justify-between mb-6 flex-wrap gap-2">
-            <h2 className="font-display text-[1.4rem] font-medium text-ink" id="worth-visiting-heading">
-              Worth Visiting Today
-            </h2>
-            <span className="font-body text-[0.82rem] text-slate">
-              Weather intelligence ranked attractions for {selectedCity.city}
-            </span>
+            <div>
+              <h2 className="font-display text-[1.4rem] font-semibold text-ink" id="worth-visiting-heading">
+                Recommended Places for Today&apos;s Weather
+              </h2>
+              <p className="font-body text-[0.82rem] text-slate mt-1">
+                Dynamic suitability insights similar to Apple Weather and Airbnb
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-6 max-md:grid-cols-1">
             {getRankedPlaces().map((place, idx) => {
               const badgeColors =
                 place.suitability >= 90
-                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                  ? "text-emerald-600"
                   : place.suitability >= 70
-                  ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                  : "bg-rose-500/10 text-rose-600 border-rose-500/20";
+                  ? "text-amber-600"
+                  : "text-rose-600";
 
               return (
                 <div
                   key={idx}
-                  className="bg-card border border-card-line rounded-[24px] overflow-hidden flex flex-col justify-between shadow-md transition-all duration-300 hover:-translate-y-[6px] hover:shadow-xl group"
+                  className="bg-white/60 backdrop-blur-lg border border-white/30 rounded-[20px] overflow-hidden flex flex-col justify-between shadow-[0_4px_20px_rgba(0,0,0,0.015)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_12px_30px_rgba(0,0,0,0.05)] group"
                 >
                   <div className="relative w-full aspect-[16/10] overflow-hidden bg-slate/10">
                     <Image
@@ -1748,36 +1793,56 @@ export default function Home() {
                       sizes="(max-width: 768px) 100vw, 350px"
                       className="w-full h-full object-cover block transition-transform duration-500 ease-out group-hover:scale-105"
                     />
-                    {/* Suitability score badge */}
+                    {/* Glassmorphic suitability score badge */}
                     <div className="absolute top-3 left-3">
-                      <span className={`px-2.5 py-1 rounded-full text-[0.72rem] font-bold border backdrop-blur-md shadow-sm ${badgeColors}`}>
-                        {place.suitability}% Match
+                      <span className={`px-3 py-1 rounded-full text-[0.72rem] font-bold bg-white/85 backdrop-blur-md shadow-sm border border-white/50 ${badgeColors}`}>
+                        {place.suitability}% Suitability
                       </span>
                     </div>
-                    {/* Location Current weather condition info */}
+                    {/* Glassmorphic temperature and small weather icon overlay */}
                     <div className="absolute top-3 right-3">
-                      <span className="bg-black/60 backdrop-blur-md text-white text-[0.72rem] font-semibold px-2.5 py-1 rounded-full border border-white/10 shadow-sm">
-                        {place.weather} · {place.temp}°C
+                      <span className="bg-black/45 backdrop-blur-md text-white text-[0.72rem] font-semibold px-2.5 py-1.5 rounded-full border border-white/10 shadow-sm flex items-center gap-1.5">
+                        {place.weather === "Sunny" && (
+                          <svg className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300 animate-pulse" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="5" />
+                            <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                            <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                          </svg>
+                        )}
+                        {place.weather === "Cloudy" && (
+                          <svg className="w-3.5 h-3.5 text-slate-200 fill-slate-200" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+                          </svg>
+                        )}
+                        {place.weather === "Rainy" && (
+                          <svg className="w-3.5 h-3.5 text-blue-300 fill-blue-300/30" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25" />
+                            <path d="M8 19v2M12 19v2M16 19v2" />
+                          </svg>
+                        )}
+                        {place.temp}°C
                       </span>
                     </div>
                   </div>
 
                   <div className="p-5 flex-1 flex flex-col justify-between">
                     <div>
-                      <h3 className="font-display text-[1.15rem] font-semibold text-ink mb-2 group-hover:text-gold-deep transition-colors">
+                      <h3 className="font-display text-[1.12rem] font-semibold text-ink mb-1 group-hover:text-gold-deep transition-colors">
                         {place.name}
                       </h3>
-                      <span className="text-[0.65rem] font-bold text-slate uppercase tracking-wider mb-1 block">
-                        AI Suitability Note
+                      <span className="text-[0.62rem] font-bold text-slate/50 uppercase tracking-wider mb-2 block">
+                        AI Recommendation
                       </span>
-                      <p className="font-body text-[0.88rem] text-slate/80 leading-relaxed mb-5">
+                      <p className="font-body text-[0.88rem] text-slate leading-relaxed mb-5">
                         {place.recommendation}
                       </p>
                     </div>
 
                     <button
                       onClick={() => setSelectedPlace(place)}
-                      className="w-full py-2.5 bg-ink text-paper hover:bg-[#2B333D] rounded-xl font-semibold text-[0.85rem] text-center transition-all duration-200 shadow-sm hover:shadow flex items-center justify-center gap-1.5 border-none cursor-pointer"
+                      className="w-full py-2 bg-ink text-paper hover:bg-[#2B333D] rounded-xl font-semibold text-[0.82rem] text-center transition-all duration-200 shadow-sm hover:shadow border-none cursor-pointer flex items-center justify-center gap-1"
                     >
                       View Weather Details
                     </button>
