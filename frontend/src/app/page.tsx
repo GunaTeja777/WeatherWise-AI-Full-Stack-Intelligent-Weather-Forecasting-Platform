@@ -2448,8 +2448,8 @@ export default function Home() {
 
       <footer className="px-8 py-12 border-t border-card-line print:border-none print:mt-12 print:pt-4">
         <div className="max-w-[1180px] mx-auto">
-          <p className="font-body text-[0.82rem] text-slate leading-relaxed max-w-[520px]">
-            Designed &amp; Developed by <strong className="font-semibold text-ink">Guna Teja</strong>. Built as part of the PM Accelerator AI Engineer Intern technical assessment. WeatherMind is a travel weather companion that pairs real conditions with trip-aware packing and timing notes for places you&apos;re actually going.
+          <p className="font-body text-[0.82rem] text-slate leading-relaxed max-w-[650px]">
+            Designed &amp; Developed by <strong className="font-semibold text-ink">Guna Teja</strong>. Built as part of the PM Accelerator AI Engineer Intern technical assessment. PM Accelerator is a premier educational program and community dedicated to empowering future product managers and AI builders with hands-on experience, career acceleration, and design thinking. WeatherMind is a travel weather companion that pairs real conditions with trip-aware packing and timing notes for places you&apos;re actually going.
           </p>
           <p className="font-display text-[0.85rem] text-ink/35 mt-6 italic print:text-slate">Clear skies ahead.</p>
         </div>

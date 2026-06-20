@@ -19,6 +19,22 @@ export async function initRedis() {
 }
 
 export async function getCache(key: string): Promise<any> {
+  if (redisClient) {
+    try {
+      const val = await redisClient.get(key);
+      return val ? JSON.parse(val) : null;
+    } catch {
+      // fallback to memory
+    }
+  }
+  const mem = memoryCache.get(key);
+  if (mem) {
+    if (Date.now() < mem.expiry) {
+      return mem.value;
+    } else {
+      memoryCache.delete(key);
+    }
+  }
   return null;
 }
 

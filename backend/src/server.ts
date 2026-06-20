@@ -206,6 +206,84 @@ app.get('/api/weather/history/recent', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/weather/history/:id (CRUD - Update)
+app.put('/api/weather/history/:id', async (req: Request, res: Response): Promise<void> => {
+  const idStr = req.params.id;
+  const id = parseInt(idStr, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Invalid query ID format' });
+    return;
+  }
+
+  const { city, startDate, endDate, results } = req.body;
+
+  try {
+    const existing: any[] = await prisma.$queryRawUnsafe(
+      'SELECT * FROM "HistoricalQuery" WHERE "id" = $1',
+      id
+    );
+    if (existing.length === 0) {
+      res.status(404).json({ error: 'Historical query not found' });
+      return;
+    }
+    const current = existing[0];
+    const newCity = city !== undefined ? city : current.city;
+    const newStartDate = startDate !== undefined ? startDate : current.startDate;
+    const newEndDate = endDate !== undefined ? endDate : current.endDate;
+    const newResults = results !== undefined ? JSON.stringify(results) : current.results;
+
+    await prisma.$executeRawUnsafe(
+      'UPDATE "HistoricalQuery" SET "city" = $1, "startDate" = $2, "endDate" = $3, "results" = $4 WHERE "id" = $5',
+      newCity,
+      newStartDate,
+      newEndDate,
+      newResults,
+      id
+    );
+
+    res.json({
+      id: id.toString(),
+      city: newCity,
+      startDate: newStartDate,
+      endDate: newEndDate,
+      results: JSON.parse(newResults)
+    });
+  } catch (error: any) {
+    console.error(`Error updating historical query:`, error.message);
+    res.status(500).json({ error: 'Failed to update historical query' });
+  }
+});
+
+// DELETE /api/weather/history/:id (CRUD - Delete)
+app.delete('/api/weather/history/:id', async (req: Request, res: Response): Promise<void> => {
+  const idStr = req.params.id;
+  const id = parseInt(idStr, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Invalid query ID format' });
+    return;
+  }
+
+  try {
+    const existing: any[] = await prisma.$queryRawUnsafe(
+      'SELECT * FROM "HistoricalQuery" WHERE "id" = $1',
+      id
+    );
+    if (existing.length === 0) {
+      res.status(404).json({ error: 'Historical query not found' });
+      return;
+    }
+
+    await prisma.$executeRawUnsafe(
+      'DELETE FROM "HistoricalQuery" WHERE "id" = $1',
+      id
+    );
+    res.json({ success: true, message: `Historical query ${id} successfully deleted` });
+  } catch (error: any) {
+    console.error(`Error deleting historical query:`, error.message);
+    res.status(500).json({ error: 'Failed to delete historical query' });
+  }
+});
+
 // GET /api/trips/export/pdf (Export itinerary to PDF using pdfkit)
 app.get('/api/trips/export/pdf', async (req: Request, res: Response) => {
   try {
