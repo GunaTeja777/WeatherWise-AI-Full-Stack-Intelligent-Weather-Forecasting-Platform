@@ -948,7 +948,35 @@ export default function Home() {
         }).format(new Date());
         setLocalTime(`${timeStr} ${selectedCity.timeZoneLabel}`);
       } catch {
-        setLocalTime("—");
+        // Fallback for non-integer timezone offsets (e.g. Etc/GMT-5.5) which throw errors in Intl
+        try {
+          let offsetHours = 0;
+          
+          // Parse POSIX offset from Etc/GMT+/-X (Note: POSIX signs are inverted)
+          const tzMatch = selectedCity.timeZone?.match(/Etc\/GMT([+-])(\d+(?:\.\d+)?)/i);
+          if (tzMatch) {
+            const sign = tzMatch[1] === "-" ? 1 : -1;
+            offsetHours = sign * parseFloat(tzMatch[2]);
+          } else {
+            // Fallback: Parse from GMT+/-X label
+            const labelMatch = selectedCity.timeZoneLabel?.match(/GMT([+-])(\d+(?:\.\d+)?)/i);
+            if (labelMatch) {
+              const sign = labelMatch[1] === "+" ? 1 : -1;
+              offsetHours = sign * parseFloat(labelMatch[2]);
+            }
+          }
+          
+          const now = new Date();
+          const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+          const targetTime = new Date(utc + offsetHours * 3600000);
+          
+          const hh = String(targetTime.getHours()).padStart(2, "0");
+          const mm = String(targetTime.getMinutes()).padStart(2, "0");
+          
+          setLocalTime(`${hh}:${mm} ${selectedCity.timeZoneLabel || ""}`);
+        } catch {
+          setLocalTime("—");
+        }
       }
     };
     
