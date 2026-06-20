@@ -1383,14 +1383,14 @@ export default function Home() {
             <span className="font-body text-[0.82rem] text-slate">Updated 12 minutes ago</span>
           </div>
 
-          <div className="grid grid-cols-5 gap-[0.9rem] mb-14 max-md:flex max-md:overflow-x-auto max-md:snap-x max-md:snap-mandatory max-md:pb-2 print:grid print:grid-cols-5 print:gap-4" role="list" aria-label="Five day weather forecast">
+          <div className="grid grid-cols-5 gap-[1.1rem] mb-14 max-md:flex max-md:overflow-x-auto max-md:snap-x max-md:snap-mandatory max-md:pb-2 print:grid print:grid-cols-5 print:gap-4" role="list" aria-label="Five day weather forecast">
             {selectedCity.forecast.map((f, i) => {
               const bgGradients = {
-                sun: "bg-gradient-to-br from-[#5C87A8] to-[#2E4863]",
-                cloud: "bg-gradient-to-br from-[#5A6A78] to-[#37434E]",
-                rain: "bg-gradient-to-br from-[#445566] to-[#222E38]",
-                "heavy-rain": "bg-gradient-to-br from-[#37424C] to-[#161E25]",
-                clear: "bg-gradient-to-br from-[#4F89A8] to-[#21455C]"
+                sun: "bg-gradient-to-br from-[#FF512F] to-[#DD2476] text-white", // twilight sunset gold
+                cloud: "bg-gradient-to-br from-[#4b6cb7] to-[#182848] text-white", // steel grey-blue
+                rain: "bg-gradient-to-br from-[#2b5876] to-[#4e4376] text-white", // stormy blue-indigo
+                "heavy-rain": "bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#0f172a] text-white", // deep purple storm
+                clear: "bg-gradient-to-br from-[#00c6ff] to-[#0072ff] text-white" // vibrant blue
               };
               const activeBg = bgGradients[f.skyType] || bgGradients.sun;
               const isRain = f.skyType === "rain" || f.skyType === "heavy-rain";
@@ -1398,7 +1398,7 @@ export default function Home() {
               return (
                 <div
                   key={i}
-                  className={`rounded-[20px] p-[1.3rem_1.1rem] relative overflow-hidden min-h-[178px] flex flex-col justify-between cursor-default transition-transform duration-200 ease-out hover:-translate-y-[3px] max-md:min-w-[138px] max-md:snap-start print:min-h-0 print:border print:border-card-line print:bg-none print:text-ink ${activeBg} ${i === 0 ? "ring-2 ring-gold shadow-[0_0_0_2px_var(--color-gold)] print:ring-0" : ""}`}
+                  className={`rounded-[24px] p-[1.4rem_1.2rem] relative overflow-hidden min-h-[196px] flex flex-col justify-between cursor-default border border-white/10 shadow-md transition-all duration-300 ease-out hover:-translate-y-[6px] hover:shadow-xl max-md:min-w-[140px] max-md:snap-start print:min-h-0 print:border print:border-card-line print:bg-none print:text-ink ${activeBg} ${i === 0 ? "ring-[3px] ring-gold/80 shadow-[0_0_24px_rgba(251,227,176,0.25)] scale-[1.02] z-10 print:ring-0 print:shadow-none print:scale-100" : ""}`}
                   role="listitem"
                   tabIndex={0}
                 >
@@ -1421,32 +1421,47 @@ export default function Home() {
                     </div>
                   )}
 
-                  <div className="font-body text-[0.78rem] font-semibold text-paper/92 uppercase tracking-[0.05em] print:text-slate">{f.day}</div>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="font-body text-[0.8rem] font-bold text-white/90 uppercase tracking-[0.06em] print:text-slate">
+                      {i === 0 ? "Today" : f.day}
+                    </div>
+                    {i === 0 && (
+                      <span className="bg-white/20 backdrop-blur-md text-gold text-[0.55rem] font-extrabold uppercase px-2 py-0.5 rounded-full border border-white/20 tracking-wider shadow-sm animate-pulse">
+                        Active
+                      </span>
+                    )}
+                  </div>
                   
-                  <span className="absolute top-[0.6rem] right-[0.7rem] opacity-90 print:text-ink" aria-hidden="true">
+                  <span className="absolute top-[1.2rem] right-[1.2rem] w-8 h-8 rounded-full bg-white/12 backdrop-blur-md border border-white/10 flex items-center justify-center shadow-inner print:border-none print:bg-none" aria-hidden="true">
                     {f.skyType === "sun" && (
-                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="1.6"><circle cx="13" cy="9" r="4"/><path d="M13 2v2M13 16v2M6.5 9h-2M22 9h-2M8.5 4.5L7 3M19 15l-1.5-1.5M8.5 13.5L7 15M19 3l-1.5 1.5"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="2"><circle cx="12" cy="12" r="4" fill="#FBE3B0" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
                     )}
                     {f.skyType === "cloud" && (
-                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#E7ECEF" strokeWidth="1.6"><path d="M18 11h-1.3A8 8 0 1 0 9 21h9a5 5 0 0 0 0-10z"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E7ECEF" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#E7ECEF" /></svg>
                     )}
                     {f.skyType === "rain" && (
-                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#CFE0EC" strokeWidth="1.6"><path d="M18 10h-1.3A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><path d="M9 19v3M13 21v2M17 19v3"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#CFE0EC" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#CFE0EC" /><path d="M7 21l-1 2M11 21l-1 2M15 21l-1 2" /></svg>
                     )}
                     {f.skyType === "heavy-rain" && (
-                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#BFD2E0" strokeWidth="1.6"><path d="M18 10h-1.3A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><path d="M8 19v3M12 21v3M16 19v3"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BFD2E0" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#BFD2E0" /><path d="M7 21l-1 2M11 21l-1 2M15 21l-1 2M12 2v2" /></svg>
                     )}
                     {f.skyType === "clear" && (
-                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="1.6"><circle cx="13" cy="9" r="4"/><path d="M13 2v2M13 16v2M6.5 9h-2M22 9h-2M8.5 4.5L7 3M19 15l-1.5-1.5M8.5 13.5L7 15M19 3l-1.5 1.5"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="2"><circle cx="12" cy="12" r="4" fill="#FBE3B0" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
                     )}
                   </span>
 
                   <div>
                     <div className="flex items-baseline gap-[0.4rem] mt-[0.6rem] print:text-ink">
-                      <span className="font-display text-[1.7rem] font-medium text-paper print:text-ink">{f.tempHigh}°</span>
-                      <span className="font-body text-[0.85rem] text-paper/60 print:text-slate">{f.tempLow}°</span>
+                      <div className="flex flex-col">
+                        <span className="text-[0.55rem] font-bold uppercase tracking-wider text-white/40 leading-none">High</span>
+                        <span className="font-display text-[1.9rem] font-semibold text-white print:text-ink mt-0.5 leading-none">{f.tempHigh}°</span>
+                      </div>
+                      <div className="flex flex-col ml-4">
+                        <span className="text-[0.55rem] font-bold uppercase tracking-wider text-white/40 leading-none">Low</span>
+                        <span className="font-body text-[1.1rem] font-medium text-white/70 print:text-slate mt-0.5 leading-none">{f.tempLow}°</span>
+                      </div>
                     </div>
-                    <div className="font-body text-[0.78rem] text-paper/75 mt-[0.2rem] print:text-slate">{f.condition}</div>
+                    <div className="font-body text-[0.8rem] font-medium text-white/80 mt-2.5 print:text-slate">{f.condition}</div>
                   </div>
                 </div>
               );
