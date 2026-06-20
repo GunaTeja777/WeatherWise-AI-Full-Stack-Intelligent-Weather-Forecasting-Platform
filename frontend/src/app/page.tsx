@@ -1085,7 +1085,10 @@ export default function Home() {
       }
     } catch (err) {
       console.error("Weather fetch failed:", err);
-      const errMsg = err instanceof Error ? err.message : `Failed to fetch weather for "${cityName}".`;
+      let errMsg = err instanceof Error ? err.message : `Failed to fetch weather for "${cityName}".`;
+      if (errMsg === "Failed to fetch") {
+        errMsg = `Could not connect to the WeatherMind API Backend at ${BACKEND_URL}. Real-time searches and AI recommendations are currently unavailable. Please verify that your backend server is deployed/running and that the NEXT_PUBLIC_BACKEND_URL environment variable is configured in your Vercel Project Settings.`;
+      }
       setGlobalError(errMsg);
       setShowSuggestions(false);
     } finally {
