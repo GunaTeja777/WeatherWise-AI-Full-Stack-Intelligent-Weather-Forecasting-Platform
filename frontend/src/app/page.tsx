@@ -1385,15 +1385,6 @@ export default function Home() {
 
           <div className="grid grid-cols-5 gap-[1.1rem] mb-14 max-md:flex max-md:overflow-x-auto max-md:snap-x max-md:snap-mandatory max-md:pb-2 print:grid print:grid-cols-5 print:gap-4" role="list" aria-label="Five day weather forecast">
             {selectedCity.forecast.map((f, i) => {
-              const bgGradients = {
-                sun: "bg-gradient-to-br from-[#FF512F] to-[#DD2476] text-white", // twilight sunset gold
-                cloud: "bg-gradient-to-br from-[#4b6cb7] to-[#182848] text-white", // steel grey-blue
-                rain: "bg-gradient-to-br from-[#2b5876] to-[#4e4376] text-white", // stormy blue-indigo
-                "heavy-rain": "bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#0f172a] text-white", // deep purple storm
-                clear: "bg-gradient-to-br from-[#00c6ff] to-[#0072ff] text-white" // vibrant blue
-              };
-              const activeBg = bgGradients[f.skyType] || bgGradients.sun;
-              
               const showRain = f.skyType === "rain" || f.skyType === "heavy-rain";
               const showSunSparkles = f.skyType === "clear" || f.skyType === "sun";
               const showClouds = f.skyType === "cloud" || f.skyType === "sun" || f.skyType === "rain" || f.skyType === "heavy-rain";
@@ -1402,7 +1393,7 @@ export default function Home() {
               return (
                 <div
                   key={i}
-                  className={`rounded-[24px] p-[1.4rem_1.2rem] relative overflow-hidden min-h-[196px] flex flex-col justify-between cursor-default border border-white/10 shadow-md transition-all duration-300 ease-out hover:-translate-y-[6px] hover:shadow-xl max-md:min-w-[140px] max-md:snap-start print:min-h-0 print:border print:border-card-line print:bg-none print:text-ink ${activeBg} ${i === 0 ? "ring-[3px] ring-gold/80 shadow-[0_0_24px_rgba(251,227,176,0.25)] scale-[1.02] z-10 print:ring-0 print:shadow-none print:scale-100" : ""}`}
+                  className={`bg-[#0A0D14]/95 border border-white/[0.07] rounded-[28px] p-5 relative overflow-hidden min-h-[224px] flex flex-col justify-between cursor-default shadow-xl transition-all duration-300 ease-out hover:-translate-y-[6px] hover:border-white/[0.15] hover:shadow-[0_12px_30px_rgba(0,0,0,0.5)] max-md:min-w-[140px] max-md:snap-start print:min-h-0 print:border print:border-card-line print:bg-none print:text-ink ${i === 0 ? "ring-[2px] ring-gold/45 shadow-[0_0_24px_rgba(232,184,109,0.1)] scale-[1.01] z-10 print:ring-0 print:shadow-none print:scale-100" : ""}`}
                   role="listitem"
                   tabIndex={0}
                 >
@@ -1436,7 +1427,7 @@ export default function Home() {
 
                   {/* SVG Drifting Clouds animation */}
                   {showClouds && isMounted && (
-                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden opacity-[0.11] z-10" aria-hidden="true">
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden opacity-[0.09] z-10" aria-hidden="true">
                       <svg viewBox="0 0 100 60" className="card-cloud-svg-1 absolute w-[60px] h-auto text-white fill-current">
                         <path d="M20 45h60 a15 15 0 0 0 0-30 a14.8 14.8 0 0 0-3.3.4 A25 25 0 0 0 30 20 a24.8 24.8 0 0 0 .5 5 A18 18 0 0 0 20 45 z" />
                       </svg>
@@ -1451,49 +1442,114 @@ export default function Home() {
                     <div className="lightning-flash z-10" />
                   )}
 
-                  <div className="flex items-center justify-between w-full relative z-20">
-                    <div className="font-body text-[0.8rem] font-bold text-white/90 uppercase tracking-[0.06em] print:text-slate">
-                      {i === 0 ? "Today" : f.day}
+                  {/* Top Row: Temperature on Left, Day + Condition on Right */}
+                  <div className="flex justify-between items-start w-full relative z-20">
+                    <div className="font-display text-[2.3rem] font-light text-white tracking-tight leading-none">
+                      {f.tempHigh}°
                     </div>
                     
-                    <div className="flex items-center gap-2">
-                      {i === 0 && (
-                        <span className="bg-white/20 backdrop-blur-md text-gold text-[0.55rem] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-white/20 tracking-wider shadow-sm animate-pulse">
-                          Active
-                        </span>
-                      )}
-                      <span className="w-8 h-8 rounded-full bg-white/12 backdrop-blur-md border border-white/10 flex items-center justify-center shadow-inner print:border-none print:bg-none" aria-hidden="true">
-                        {f.skyType === "sun" && (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="2"><circle cx="12" cy="12" r="4" fill="#FBE3B0" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-                        )}
-                        {f.skyType === "cloud" && (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E7ECEF" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#E7ECEF" /></svg>
-                        )}
-                        {f.skyType === "rain" && (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#CFE0EC" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#CFE0EC" /><path d="M7 21l-1 2M11 21l-1 2M15 21l-1 2" /></svg>
-                        )}
-                        {f.skyType === "heavy-rain" && (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BFD2E0" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#BFD2E0" /><path d="M7 21l-1 2M11 21l-1 2M15 21l-1 2M12 2v2" /></svg>
-                        )}
-                        {f.skyType === "clear" && (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FBE3B0" strokeWidth="2"><circle cx="12" cy="12" r="4" fill="#FBE3B0" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-                        )}
+                    <div className="flex flex-col items-end text-right">
+                      <span className="text-[0.7rem] font-bold text-white/40 uppercase tracking-wider leading-none">
+                        {i === 0 ? "Today" : f.day}
                       </span>
+                      <span className="text-[0.76rem] text-white/80 font-medium leading-tight mt-1 max-w-[85px]">
+                        {f.condition}
+                      </span>
+                      {i === 0 && (
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <span className="bg-white/12 text-gold text-[0.52rem] font-extrabold uppercase px-2 py-0.5 rounded-full border border-white/10 tracking-wider shadow-sm animate-pulse">
+                            Active
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="relative z-20">
-                    <div className="flex items-baseline gap-[0.4rem] mt-[0.6rem] print:text-ink">
-                      <div className="flex flex-col">
-                        <span className="text-[0.55rem] font-bold uppercase tracking-wider text-white/40 leading-none">High</span>
-                        <span className="font-display text-[1.9rem] font-semibold text-white print:text-ink mt-0.5 leading-none">{f.tempHigh}°</span>
-                      </div>
-                      <div className="flex flex-col ml-4">
-                        <span className="text-[0.55rem] font-bold uppercase tracking-wider text-white/40 leading-none">Low</span>
-                        <span className="font-body text-[1.1rem] font-medium text-white/70 print:text-slate mt-0.5 leading-none">{f.tempLow}°</span>
-                      </div>
+                  {/* Center Row: Large Gradient Weather Icon with ambient glow */}
+                  <div className="flex-1 flex items-center justify-center py-2 relative my-1 z-20">
+                    {f.skyType === "sun" && <div className="absolute w-12 h-12 rounded-full bg-amber-500/10 blur-xl animate-pulse" />}
+                    {f.skyType === "clear" && <div className="absolute w-12 h-12 rounded-full bg-sky-500/10 blur-xl animate-pulse" />}
+                    {f.skyType === "cloud" && <div className="absolute w-12 h-12 rounded-full bg-slate-500/10 blur-xl" />}
+                    {f.skyType === "rain" && <div className="absolute w-12 h-12 rounded-full bg-blue-500/10 blur-xl" />}
+                    {f.skyType === "heavy-rain" && <div className="absolute w-12 h-12 rounded-full bg-indigo-500/15 blur-xl" />}
+
+                    <span className="relative z-10 w-16 h-16 flex items-center justify-center" aria-hidden="true">
+                      {f.skyType === "sun" && (
+                        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <defs>
+                            <linearGradient id="sunGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#FFF5C0" />
+                              <stop offset="100%" stopColor="#EAB308" />
+                            </linearGradient>
+                            <linearGradient id="cloudGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#E2E8F0" />
+                              <stop offset="100%" stopColor="#94A3B8" />
+                            </linearGradient>
+                          </defs>
+                          <circle cx="15" cy="9" r="4" fill="url(#sunGrad)" stroke="url(#sunGrad)" />
+                          <path d="M18 13h-1.26A8 8 0 1 0 9 23h9a5 5 0 0 0 0-10z" fill="url(#cloudGrad)" stroke="url(#cloudGrad)" />
+                        </svg>
+                      )}
+                      {f.skyType === "cloud" && (
+                        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <defs>
+                            <linearGradient id="cloudDarkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#94A3B8" />
+                              <stop offset="100%" stopColor="#475569" />
+                            </linearGradient>
+                          </defs>
+                          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="url(#cloudDarkGrad)" stroke="url(#cloudDarkGrad)" />
+                        </svg>
+                      )}
+                      {f.skyType === "rain" && (
+                        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <defs>
+                            <linearGradient id="rainCloudGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#64748B" />
+                              <stop offset="100%" stopColor="#334155" />
+                            </linearGradient>
+                          </defs>
+                          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="url(#rainCloudGrad)" stroke="url(#rainCloudGrad)" />
+                          <path d="M7 21l-1 2M11 21l-1 2M15 21l-1 2" stroke="#38BDF8" strokeWidth="2.2" strokeLinecap="round" />
+                        </svg>
+                      )}
+                      {f.skyType === "heavy-rain" && (
+                        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <defs>
+                            <linearGradient id="stormCloudGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#475569" />
+                              <stop offset="100%" stopColor="#1E293B" />
+                            </linearGradient>
+                          </defs>
+                          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="url(#stormCloudGrad)" stroke="url(#stormCloudGrad)" />
+                          <path d="M13 18l-2 4h3l-1 4" stroke="#FACC15" fill="#FACC15" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                      {f.skyType === "clear" && (
+                        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="url(#clearSunGrad)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <defs>
+                            <linearGradient id="clearSunGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#FFF3B0" />
+                              <stop offset="100%" stopColor="#CA8A04" />
+                            </linearGradient>
+                          </defs>
+                          <circle cx="12" cy="12" r="5" fill="url(#clearSunGrad)" />
+                          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                        </svg>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Bottom Row: High / Low Columns divided by vertical line */}
+                  <div className="grid grid-cols-2 divide-x divide-white/[0.08] w-full text-center relative z-20 pt-2 border-t border-white/[0.05]">
+                    <div className="flex flex-col items-center justify-center">
+                      <span className="text-[0.55rem] font-bold text-white/30 uppercase tracking-widest leading-none">High</span>
+                      <span className="text-[0.95rem] font-semibold text-white mt-0.5 leading-none">{f.tempHigh}°</span>
                     </div>
-                    <div className="font-body text-[0.8rem] font-medium text-white/80 mt-2.5 print:text-slate">{f.condition}</div>
+                    <div className="flex flex-col items-center justify-center">
+                      <span className="text-[0.55rem] font-bold text-white/30 uppercase tracking-widest leading-none">Low</span>
+                      <span className="text-[0.95rem] font-semibold text-white/70 mt-0.5 leading-none">{f.tempLow}°</span>
+                    </div>
                   </div>
                 </div>
               );
