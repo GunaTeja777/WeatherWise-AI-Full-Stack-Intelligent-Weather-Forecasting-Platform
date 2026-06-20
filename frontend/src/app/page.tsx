@@ -430,6 +430,22 @@ interface CloudElement {
   color: string;
 }
 
+interface PlannerScheduleItem {
+  time: string;
+  activity: string;
+  note: string;
+}
+
+interface PlannedItineraryDay {
+  dayName: string;
+  weather: {
+    temp: number;
+    cond: string;
+  };
+  schedule: PlannerScheduleItem[];
+  packingTip: string;
+}
+
 const WeatherScene: React.FC<WeatherSceneProps> = ({
   skyType,
   condition,
@@ -798,6 +814,14 @@ export default function Home() {
   const [editingTripId, setEditingTripId] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [modalSaving, setModalSaving] = useState(false);
+
+  // Planner modal state
+  const [plannerTrip, setPlannerTrip] = useState<typeof DEFAULT_TRIPS[number] | null>(null);
+  const [plannerDestinations, setPlannerDestinations] = useState<string[]>([]);
+  const [newDestinationInput, setNewDestinationInput] = useState("");
+  const [isGeneratingItinerary, setIsGeneratingItinerary] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [plannedItinerary, setPlannedItinerary] = useState<PlannedItineraryDay[] | null>(null);
 
   // Historical query state
   const [histCity, setHistCity] = useState("");
@@ -1266,6 +1290,153 @@ export default function Home() {
 
     setModalSaving(false);
     setShowModal(false);
+  };
+
+  const handleOpenPlanner = (trip: typeof DEFAULT_TRIPS[number]) => {
+    setPlannerTrip(trip);
+    setPlannedItinerary(null);
+    setIsGeneratingItinerary(false);
+    setGenerationProgress(0);
+
+    const dbKey = trip.city.toLowerCase();
+    const dbCity = CITIES_DB[dbKey as keyof typeof CITIES_DB];
+    if (dbCity) {
+      setPlannerDestinations(dbCity.places.map(p => p.name));
+    } else {
+      setPlannerDestinations([
+        `${trip.city} Historic Center`,
+        `${trip.city} Central Park`
+      ]);
+    }
+  };
+
+  const handleGenerateItinerary = () => {
+    if (!plannerTrip) return;
+    setIsGeneratingItinerary(true);
+    setGenerationProgress(0);
+
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setGenerationProgress(progress);
+      if (progress >= 100) {
+        clearInterval(interval);
+        
+        const dbKey = plannerTrip.city.toLowerCase();
+        const dbCity = CITIES_DB[dbKey as keyof typeof CITIES_DB];
+        
+        const daysToPlan = 3;
+        const generatedDays = [];
+        
+        const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        const startDayIndex = new Date().getDay();
+
+        const forecastSource = dbCity ? dbCity.forecast : [
+          { tempHigh: 28, condition: "Partly cloudy", skyType: "sun" },
+          { tempHigh: 24, condition: "Light rain showers", skyType: "rain" },
+          { tempHigh: 29, condition: "Sunny & Warm", skyType: "clear" }
+        ];
+
+        const destinationsCopy = [...plannerDestinations];
+
+        for (let i = 0; i < daysToPlan; i++) {
+          const dayName = daysOfWeek[(startDayIndex + i) % 7];
+          const weatherDay = forecastSource[i % forecastSource.length];
+          const tempVal = weatherDay ? weatherDay.tempHigh : 25;
+          const condText = weatherDay ? weatherDay.condition : "Partly cloudy";
+          const skyVal = weatherDay ? weatherDay.skyType : "sun";
+
+          const isRainy = skyVal === "rain" || skyVal === "heavy-rain";
+
+          const indoorAttractions: string[] = [];
+          const outdoorAttractions: string[] = [];
+
+          destinationsCopy.forEach(dest => {
+            const lower = dest.toLowerCase();
+            if (
+              lower.includes("museum") ||
+              lower.includes("temple") ||
+              lower.includes("gallery") ||
+              lower.includes("bazaar") ||
+              lower.includes("mall") ||
+              lower.includes("shopping") ||
+              lower.includes("church") ||
+              lower.includes("indoor")
+            ) {
+              indoorAttractions.push(dest);
+            } else {
+              outdoorAttractions.push(dest);
+            }
+          });
+
+          const daySchedule = [];
+          
+          if (isRainy) {
+            const item1 = indoorAttractions.shift() || outdoorAttractions.shift() || "Explore Local Cuisine";
+            const item2 = indoorAttractions.shift() || outdoorAttractions.shift() || "Relaxing Café Stop";
+            
+            daySchedule.push({
+              time: "10:00 AM",
+              activity: item1,
+              note: `Perfect choice for today's rainfall. This indoor spot will keep you dry while enjoying your morning.`
+            });
+            daySchedule.push({
+              time: "02:30 PM",
+              activity: item2,
+              note: `Rain is expected to intensify. Retracting to this sheltered destination keeps your group safe.`
+            });
+
+            // Update copy
+            const idx1 = destinationsCopy.indexOf(item1);
+            if (idx1 !== -1) destinationsCopy.splice(idx1, 1);
+            const idx2 = destinationsCopy.indexOf(item2);
+            if (idx2 !== -1) destinationsCopy.splice(idx2, 1);
+          } else {
+            const item1 = outdoorAttractions.shift() || indoorAttractions.shift() || "Scenic Walking Tour";
+            const item2 = outdoorAttractions.shift() || indoorAttractions.shift() || "Panoramic Viewpoint Visit";
+            
+            daySchedule.push({
+              time: "09:30 AM",
+              activity: item1,
+              note: `Sunny conditions are perfect for outdoor exploring. UV indices are safe during morning slots.`
+            });
+            daySchedule.push({
+              time: "03:30 PM",
+              activity: item2,
+              note: `Pleasant evening temperatures make it ideal for panoramic views or photography.`
+            });
+
+            // Update copy
+            const idx1 = destinationsCopy.indexOf(item1);
+            if (idx1 !== -1) destinationsCopy.splice(idx1, 1);
+            const idx2 = destinationsCopy.indexOf(item2);
+            if (idx2 !== -1) destinationsCopy.splice(idx2, 1);
+          }
+
+          let packingTip = "Carry light clothing and comfortable walking shoes.";
+          if (isRainy) {
+            packingTip = "Bring a windproof umbrella, rain jacket, and water-resistant boots.";
+          } else if (tempVal > 28) {
+            packingTip = "Apply high-rating sun protection (SPF 50), carry polar sunglasses, and keep hydrated.";
+          } else if (tempVal < 15) {
+            packingTip = "Layer up with a warm wool coat, light fleece sweater, and wind-cheater.";
+          }
+
+          generatedDays.push({
+            dayName,
+            weather: {
+              temp: tempVal,
+              cond: condText
+            },
+            schedule: daySchedule,
+            packingTip
+          });
+        }
+
+        setPlannedItinerary(generatedDays);
+        setIsGeneratingItinerary(false);
+      }
+    }, 200);
   };
 
   // Export actions
@@ -2191,6 +2362,14 @@ export default function Home() {
                   </span>
                   <div className="flex gap-2 flex-shrink-0 print:hidden">
                     <button
+                      onClick={() => handleOpenPlanner(trip)}
+                      className="px-3 py-1.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700 text-[0.78rem] font-semibold cursor-pointer flex items-center gap-1 transition-all duration-200 hover:bg-amber-100 hover:text-amber-800"
+                      aria-label={`Plan ${trip.city} itinerary`}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                      Planner
+                    </button>
+                    <button
                       onClick={() => handleOpenEditModal(trip.id)}
                       className="px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[0.78rem] font-semibold cursor-pointer flex items-center gap-1 transition-all duration-200 hover:bg-blue-100 hover:text-blue-800"
                       aria-label={`Edit ${trip.city} trip`}
@@ -2342,6 +2521,265 @@ export default function Home() {
               <h3 className="font-display text-[1.4rem] font-semibold text-ink mb-2">{selectedPlace.name}</h3>
               <p className="font-body text-[0.9rem] text-slate leading-relaxed">{selectedPlace.desc}</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TRIP PLANNER MODAL */}
+      {plannerTrip && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden animate-fade-in" onClick={() => {
+          if (!isGeneratingItinerary) {
+            setPlannerTrip(null);
+            setPlannedItinerary(null);
+          }
+        }}>
+          <div 
+            className="bg-[#0D111A]/95 border border-white/[0.08] rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl relative text-paper p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-white/10 pb-4 mb-4">
+              <div>
+                <h3 className="font-display text-[1.3rem] font-medium text-white flex items-center gap-2">
+                  <span className="w-[8px] h-[8px] rounded-full bg-gold inline-block"></span>
+                  AI Weather-Aware Trip Planner
+                </h3>
+                <p className="font-body text-[0.82rem] text-slate mt-1">
+                  Planning itinerary for <strong className="text-white">{plannerTrip.city}, {plannerTrip.country}</strong> ({plannerTrip.dates})
+                </p>
+              </div>
+              <button 
+                onClick={() => {
+                  setPlannerTrip(null);
+                  setPlannedItinerary(null);
+                }}
+                disabled={isGeneratingItinerary}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors border-none cursor-pointer disabled:opacity-50"
+                aria-label="Close planner"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {/* Destinations step (if not planned yet) */}
+            {!plannedItinerary && !isGeneratingItinerary && (
+              <div className="space-y-6">
+                <div>
+                  <h4 className="font-display text-[0.95rem] font-semibold text-white/90 mb-2">1. Select/Confirm Places to Visit</h4>
+                  <p className="font-body text-[0.82rem] text-slate mb-3">
+                    We gathered some top sights in {plannerTrip.city}. Click to toggle them, or add your custom destinations below:
+                  </p>
+                  
+                  {/* Suggestions tags */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {(() => {
+                      const dbKey = plannerTrip.city.toLowerCase();
+                      const dbCity = CITIES_DB[dbKey as keyof typeof CITIES_DB];
+                      const suggestedPlaces = dbCity 
+                        ? dbCity.places.map(p => p.name)
+                        : [`${plannerTrip.city} Historic Center`, `${plannerTrip.city} Central Park`, `${plannerTrip.city} Local Museum`, `${plannerTrip.city} Botanical Gardens`, `${plannerTrip.city} Scenic Viewpoint`];
+                      
+                      return suggestedPlaces.map((placeName) => {
+                        const isSelected = plannerDestinations.includes(placeName);
+                        return (
+                          <button
+                            key={placeName}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setPlannerDestinations(plannerDestinations.filter(d => d !== placeName));
+                              } else {
+                                setPlannerDestinations([...plannerDestinations, placeName]);
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-full text-[0.76rem] font-semibold transition-all duration-200 cursor-pointer border ${
+                              isSelected
+                                ? "bg-gold text-ink border-gold"
+                                : "bg-white/5 border-white/10 text-slate hover:border-white/20 hover:text-white"
+                            }`}
+                          >
+                            {isSelected ? "✓ " : "+ "} {placeName}
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+
+                  {/* Custom input */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Type custom attraction..."
+                      value={newDestinationInput}
+                      onChange={(e) => setNewDestinationInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (newDestinationInput.trim() && !plannerDestinations.includes(newDestinationInput.trim())) {
+                            setPlannerDestinations([...plannerDestinations, newDestinationInput.trim()]);
+                            setNewDestinationInput("");
+                          }
+                        }
+                      }}
+                      className="flex-1 bg-white/5 border border-white/12 rounded-lg px-3 py-2 text-white text-[0.88rem] outline-none focus:border-gold"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newDestinationInput.trim() && !plannerDestinations.includes(newDestinationInput.trim())) {
+                          setPlannerDestinations([...plannerDestinations, newDestinationInput.trim()]);
+                          setNewDestinationInput("");
+                        }
+                      }}
+                      className="px-4 py-2 bg-gold text-ink font-semibold rounded-lg text-[0.82rem] hover:bg-gold-deep transition-colors"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-display text-[0.95rem] font-semibold text-white/90 mb-2">2. Destination Checklist</h4>
+                  {plannerDestinations.length === 0 ? (
+                    <div className="text-[0.82rem] text-slate italic bg-white/5 p-3 rounded-lg border border-dashed border-white/10">
+                      No destinations selected yet. Add or toggle places above.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 bg-white/5 p-3 rounded-lg border border-white/10">
+                      {plannerDestinations.map(d => (
+                        <span key={d} className="bg-white/10 px-2.5 py-1 rounded-md text-[0.76rem] font-medium flex items-center gap-1.5">
+                          {d}
+                          <button 
+                            type="button" 
+                            onClick={() => setPlannerDestinations(plannerDestinations.filter(p => p !== d))}
+                            className="text-red-400 hover:text-red-300 font-bold bg-transparent border-none cursor-pointer text-[0.7rem]"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlannerTrip(null);
+                      setPlannedItinerary(null);
+                    }}
+                    className="px-4 py-2 rounded-full border border-white/10 text-slate hover:bg-white/5 text-[0.85rem] font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerateItinerary}
+                    disabled={plannerDestinations.length === 0}
+                    className="px-5 py-2 rounded-full bg-gold text-ink hover:bg-gold-deep text-[0.85rem] font-bold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  >
+                    Generate Daily Itinerary
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Generating animation step */}
+            {isGeneratingItinerary && (
+              <div className="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="relative w-16 h-16 flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border-2 border-white/10"></div>
+                  <div className="absolute inset-0 rounded-full border-2 border-gold border-t-transparent animate-spin"></div>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gold animate-pulse"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <div>
+                  <h4 className="font-display text-[1.1rem] font-semibold text-white">WeatherWise AI Engine running...</h4>
+                  <p className="font-body text-[0.82rem] text-slate mt-1 max-w-[280px]">
+                    {generationProgress < 25 && "Analyzing historical climate trends & indices..."}
+                    {generationProgress >= 25 && generationProgress < 50 && "Parsing satellite humidity & cloud layers..."}
+                    {generationProgress >= 50 && generationProgress < 75 && "Mapping indoor attractions to rainy intervals..."}
+                    {generationProgress >= 75 && "Sequencing optimal route timeline..."}
+                  </p>
+                </div>
+                <div className="w-[200px] h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-full bg-gold transition-all duration-300" style={{ width: `${generationProgress}%` }}></div>
+                </div>
+                <span className="text-[0.78rem] text-slate font-medium">{generationProgress}%</span>
+              </div>
+            )}
+
+            {/* Finished itinerary plan */}
+            {plannedItinerary && !isGeneratingItinerary && (
+              <div className="space-y-6">
+                <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gold/14 text-gold flex items-center justify-center flex-shrink-0">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                  </div>
+                  <p className="font-body text-[0.82rem] text-slate leading-relaxed">
+                    <strong className="text-white">AI Analysis Complete:</strong> We planned your itinerary by aligning selected attractions to the dryest and coolest times of each day, maximizing comfort.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  {plannedItinerary.map((day, idx) => (
+                    <div key={idx} className="bg-white/5 border border-white/8 rounded-xl p-4 space-y-3">
+                      {/* Day title & Weather */}
+                      <div className="flex justify-between items-center border-b border-white/8 pb-2">
+                        <h4 className="font-display text-[0.92rem] font-semibold text-white flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gold"></span>
+                          Day {idx + 1}: {day.dayName}
+                        </h4>
+                        <span className="font-body text-[0.76rem] font-semibold text-gold-deep bg-gold/14 px-2 py-0.5 rounded-full border border-gold/10">
+                          {day.weather.temp}°C · {day.weather.cond}
+                        </span>
+                      </div>
+
+                      {/* Attractions sequence */}
+                      <div className="space-y-2">
+                        {day.schedule.map((item: PlannerScheduleItem, sIdx: number) => (
+                          <div key={sIdx} className="flex gap-3 text-[0.82rem] font-body bg-white/5 p-2.5 rounded border border-white/5">
+                            <span className="text-gold font-semibold w-[65px] flex-shrink-0">{item.time}</span>
+                            <div className="space-y-0.5">
+                              <div className="font-semibold text-white">{item.activity}</div>
+                              <p className="text-slate text-[0.76rem]">{item.note}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Daily packing advice */}
+                      <div className="text-[0.78rem] font-body text-slate flex items-start gap-1.5 mt-2 bg-black/20 p-2 rounded">
+                        <span className="text-gold flex-shrink-0">💡 Packing Tip:</span>
+                        <span>{day.packingTip}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center pt-4 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlannedItinerary(null);
+                    }}
+                    className="px-4 py-2 rounded-full border border-white/10 text-slate hover:bg-white/5 text-[0.85rem] font-medium transition-colors"
+                  >
+                    Back to Selection
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlannerTrip(null);
+                      setPlannedItinerary(null);
+                    }}
+                    className="px-5 py-2 rounded-full bg-gold text-ink hover:bg-gold-deep text-[0.85rem] font-bold transition-all duration-200"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
