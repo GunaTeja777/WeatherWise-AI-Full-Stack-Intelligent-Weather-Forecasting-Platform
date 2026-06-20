@@ -454,6 +454,10 @@ const WeatherScene: React.FC<WeatherSceneProps> = ({
   localHour
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Parse wind speed (default 10 km/h if not found)
   const windSpeed = useMemo(() => {
@@ -698,12 +702,15 @@ const WeatherScene: React.FC<WeatherSceneProps> = ({
       const baseDuration = layer === 1 ? 160 : layer === 2 ? 100 : 60;
       const duration = baseDuration / (windFactor / 10);
 
+      const delayVal = ((i * 37) % baseDuration).toFixed(1);
+      const topVal = (10 + ((i * 7) % 32)).toFixed(1);
+
       list.push({
         id: i,
         layer,
         duration: duration.toFixed(1),
-        delay: `-${(Math.random() * baseDuration).toFixed(1)}s`,
-        top: `${10 + Math.random() * 32}%`,
+        delay: `-${delayVal}s`,
+        top: `${topVal}%`,
         scale: layer === 1 ? 0.6 : layer === 2 ? 0.85 : 1.1,
         opacity: layer === 1 ? 0.35 : layer === 2 ? 0.65 : 0.85,
         color
@@ -712,6 +719,15 @@ const WeatherScene: React.FC<WeatherSceneProps> = ({
 
     return list;
   }, [skyType, windSpeed, isNight]);
+
+  if (!mounted) {
+    return (
+      <div
+        className="absolute inset-0 transition-all duration-1000 ease-in-out pointer-events-none"
+        style={{ background: skyBackground }}
+      />
+    );
+  }
 
   return (
     <div
