@@ -356,68 +356,82 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
     // 1. Unified geocoding resolution
     const { name, lat, lon, country } = await resolveLocation(cityName, OWM_KEY);
 
-    // 2. Fetch current weather & 5-day forecast
+    // 2. Prepare API endpoints
     const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${OWM_KEY}`;
-    const forecastResponse = await axios.get(forecastUrl);
+    const aqiUrl = `http://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${OWM_KEY}`;
 
-    // 3. Fetch Air Pollution (AQI)
-    let aqiText = "Good";
-    let aqiValue = 45; // standard AQI fallback
-    try {
-      const aqiUrl = `http://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${OWM_KEY}`;
-      const aqiResponse = await axios.get(aqiUrl);
-      const level = aqiResponse.data.list[0].main.aqi; // 1 to 5
-      const mapAQI = [
-        { label: "Good", val: 20 },
-        { label: "Fair", val: 45 },
-        { label: "Moderate", val: 75 },
-        { label: "Poor", val: 120 },
-        { label: "Very Poor", val: 180 }
-      ];
-      const match = mapAQI[level - 1] || mapAQI[0];
-      aqiText = match.label;
-      aqiValue = match.val;
-    } catch {
-      // ignore
+    const today = new Date();
+    const endOffset = new Date();
+    endOffset.setDate(today.getDate() + 5);
+    const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+    // Create 5 concurrent historical archive requests to Open-Meteo
+    const histPromises = [];
+    for (let offsetYears = 1; offsetYears <= 5; offsetYears++) {
+      const histStart = new Date(today);
+      histStart.setFullYear(today.getFullYear() - offsetYears);
+      const histEnd = new Date(endOffset);
+      histEnd.setFullYear(endOffset.getFullYear() - offsetYears);
+
+      const openMeteoUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(histStart)}&end_date=${formatDate(histEnd)}&daily=rain_sum&timezone=auto`;
+      histPromises.push(
+        axios.get(openMeteoUrl)
+          .then(res => {
+            if (res.data && res.data.daily && res.data.daily.rain_sum) {
+              const sum: number = res.data.daily.rain_sum.reduce((a: number, b: number) => a + (b || 0), 0);
+              return { sum, success: true };
+            }
+            return { sum: 0, success: false };
+          })
+          .catch(() => ({ sum: 0, success: false }))
+      );
     }
 
-    // 4. Fetch 5-year historical average precipitation (Open-Meteo)
+    // 3. Launch OWM Forecast, OWM AQI, and all 5 Open-Meteo requests concurrently!
+    const [forecastResponse, aqiResponse, ...histResults] = await Promise.all([
+      axios.get(forecastUrl),
+      axios.get(aqiUrl).catch(() => null), // Gracefully handle if AQI call fails
+      ...histPromises
+    ]);
+
+    // 4. Process Air Pollution (AQI)
+    let aqiText = "Good";
+    let aqiValue = 45;
+    if (aqiResponse && aqiResponse.data && aqiResponse.data.list && aqiResponse.data.list.length > 0) {
+      try {
+        const level = aqiResponse.data.list[0].main.aqi; // 1 to 5
+        const mapAQI = [
+          { label: "Good", val: 20 },
+          { label: "Fair", val: 45 },
+          { label: "Moderate", val: 75 },
+          { label: "Poor", val: 120 },
+          { label: "Very Poor", val: 180 }
+        ];
+        const match = mapAQI[level - 1] || mapAQI[0];
+        aqiText = match.label;
+        aqiValue = match.val;
+      } catch {
+        // ignore
+      }
+    }
+
+    // 5. Process 5-year historical average precipitation (Open-Meteo)
     let historicalDataSummary = "Historical average rain for this period is around 10mm.";
     let percentWetter = 0;
     try {
-      const today = new Date();
-      const endOffset = new Date();
-      endOffset.setDate(today.getDate() + 5);
-
-      // We will sum the forecasted rain to compare
       const forecastRainSum = forecastResponse.data.list
         .slice(0, 40) // 5 days
         .reduce((sum: number, item: any) => sum + (item.rain ? (item.rain['3h'] || 0) : 0), 0);
 
-      // Fetch same 5-day window for the last 5 years from Open-Meteo
       let totalHistoricalRain = 0;
       let countYears = 0;
 
-      for (let offsetYears = 1; offsetYears <= 5; offsetYears++) {
-        const histStart = new Date(today);
-        histStart.setFullYear(today.getFullYear() - offsetYears);
-        const histEnd = new Date(endOffset);
-        histEnd.setFullYear(endOffset.getFullYear() - offsetYears);
-
-        const formatDate = (d: Date) => d.toISOString().split('T')[0];
-        const openMeteoUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(histStart)}&end_date=${formatDate(histEnd)}&daily=rain_sum&timezone=auto`;
-        
-        try {
-          const histRes = await axios.get(openMeteoUrl);
-          if (histRes.data && histRes.data.daily && histRes.data.daily.rain_sum) {
-            const sum: number = histRes.data.daily.rain_sum.reduce((a: number, b: number) => a + (b || 0), 0);
-            totalHistoricalRain += sum;
-            countYears++;
-          }
-        } catch {
-          // ignore individual year error
+      histResults.forEach(res => {
+        if (res.success) {
+          totalHistoricalRain += res.sum;
+          countYears++;
         }
-      }
+      });
 
       const avgHistRain = countYears > 0 ? (totalHistoricalRain / countYears) : 5;
       

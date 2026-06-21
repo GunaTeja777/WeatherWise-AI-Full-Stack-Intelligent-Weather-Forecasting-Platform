@@ -1267,23 +1267,46 @@ export default function Home() {
     const formattedDates = formatDateRange(modalStart, modalEnd);
     const key = modalCity.toLowerCase().trim();
     
-    // First, try fetching the weather details for this city to set swatches
+    // First, check local DB for instant resolution, then fetch from API
     let weatherRef = null;
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/weather?city=${encodeURIComponent(modalCity)}`);
-      if (res.ok) {
-        weatherRef = await res.json();
-      }
-    } catch (err) {
-      console.warn("Could not fetch city weather from API, checking local pre-configured DB", err);
-    }
+    let isNotFound = false;
+    let isOffline = false;
 
-    if (!weatherRef) {
+    if (CITIES_DB[key]) {
       weatherRef = CITIES_DB[key];
+    } else {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/weather?city=${encodeURIComponent(modalCity)}`);
+        if (res.ok) {
+          weatherRef = await res.json();
+        } else if (res.status === 404) {
+          isNotFound = true;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "Validation error");
+        }
+      } catch (err) {
+        console.warn("Could not fetch city weather from API", err);
+        if (err instanceof Error && (err.message.includes("Failed to fetch") || err.message.includes("network"))) {
+          isOffline = true;
+        }
+      }
+    }
+
+    if (isNotFound) {
+      setModalError(`City "${modalCity}" not found. Please enter a valid global city name.`);
+      setModalSaving(false);
+      return;
     }
 
     if (!weatherRef) {
-      weatherRef = generateCityData(modalCity);
+      if (isOffline) {
+        setModalError("Unable to validate city because the weather service is offline. Please try again later.");
+      } else {
+        setModalError(`City "${modalCity}" could not be validated. Please enter a valid global city name.`);
+      }
+      setModalSaving(false);
+      return;
     }
 
     const tempSnapshot = `${weatherRef.temp}°`;
