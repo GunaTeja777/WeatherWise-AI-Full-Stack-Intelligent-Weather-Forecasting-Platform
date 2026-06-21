@@ -739,16 +739,27 @@ const WeatherScene: React.FC<WeatherSceneProps> = ({
           from { transform: translate3d(-300px, 0, 0); }
           to { transform: translate3d(100vw, 0, 0); }
         }
+        @keyframes sunGlow {
+          0%, 100% {
+            box-shadow: 0 0 35px 8px rgba(255, 230, 180, 0.5), 0 0 65px 18px rgba(232, 184, 109, 0.25);
+            transform: translate(-50%, -50%) scale(1);
+          }
+          50% {
+            box-shadow: 0 0 50px 12px rgba(255, 230, 180, 0.65), 0 0 80px 25px rgba(232, 184, 109, 0.35);
+            transform: translate(-50%, -50%) scale(1.04);
+          }
+        }
       `}</style>
 
       {/* 1. Dynamic Sun / Moon */}
       {(!isNight && (skyType === "clear" || skyType === "haze" || skyType === "rain")) && (
         <div
-          className="absolute w-[120px] h-[120px] rounded-full transition-all duration-1000 bg-gradient-to-br from-[#FFE7B8] via-[#E8B86D] to-[#C98C4A] shadow-[0_0_60px_rgba(255,230,180,0.5)] animate-pulse"
+          className="absolute w-[120px] h-[120px] rounded-full transition-all duration-1000 bg-gradient-to-br from-[#FFE7B8] via-[#E8B86D] to-[#C98C4A]"
           style={{
             left: `${celestials.x}%`,
             top: `${celestials.y}%`,
-            transform: "translate(-50%, -50%)"
+            transform: "translate(-50%, -50%)",
+            animation: "sunGlow 8s ease-in-out infinite"
           }}
         />
       )}
@@ -1684,6 +1695,8 @@ export default function Home() {
     return parseInt(match[1], 10);
   };
   const localHour = getLocalHour();
+  const isSunrise = localHour >= 6 && localHour < 8;
+  const isSunset = localHour >= 17 && localHour < 19;
 
   const isNight = localHour >= 19 || localHour < 6;
 
@@ -1734,14 +1747,17 @@ export default function Home() {
         {/* HERO CONTENT */}
         <div className="relative z-10 flex-1 flex flex-col justify-end px-8 pb-10 max-w-[1180px] mx-auto w-full print:p-0">
           {/* Helper label explaining custom search capability */}
-          <div className="mb-2 text-[0.82rem] text-gold/80 font-medium tracking-[0.01em] print:hidden">
+          <div className={`mb-2 text-[0.82rem] tracking-[0.01em] print:hidden ${(isSunrise || isSunset) ? "text-ink/80 font-semibold" : "text-gold/80 font-medium"}`}>
             Enter city, town, zip/postal code, landmark, or GPS coordinates (lat, lon)
           </div>
           <div className="flex items-center gap-[0.65rem] mb-[2rem] max-w-[500px] w-full relative z-30 print:hidden" ref={searchContainerRef}>
             <div className="relative flex-1">
               <input
                 type="text"
-                className="bg-white/8 border border-white/16 rounded-full text-paper font-body text-[0.92rem] px-[1.3rem] py-[0.7rem] w-full outline-none backdrop-blur-[6px] transition-all duration-200 placeholder:text-paper-faint focus:border-gold/60 focus:bg-white/12 disabled:opacity-50"
+                className={(isSunrise || isSunset)
+                  ? "bg-ink/6 border border-ink/14 rounded-full text-ink font-body text-[0.92rem] px-[1.3rem] py-[0.7rem] w-full outline-none backdrop-blur-[6px] transition-all duration-200 placeholder:text-ink/45 focus:border-ink/30 focus:bg-ink/10 disabled:opacity-50"
+                  : "bg-white/8 border border-white/16 rounded-full text-paper font-body text-[0.92rem] px-[1.3rem] py-[0.7rem] w-full outline-none backdrop-blur-[6px] transition-all duration-200 placeholder:text-paper-faint focus:border-gold/60 focus:bg-white/12 disabled:opacity-50"
+                }
                 placeholder={isLoadingWeather ? "AI Intelligence loading..." : "Search e.g. Eiffel Tower, 90210, 40.71, -74.01..."}
                 aria-label="Search for a location"
                 value={searchQuery}
@@ -1783,11 +1799,15 @@ export default function Home() {
             <button
               onClick={() => handleSearchSubmit(searchQuery)}
               disabled={isLoadingWeather}
-              className="flex-shrink-0 px-5 py-[0.7rem] rounded-full bg-gold hover:bg-amber-400 disabled:bg-gold/50 disabled:cursor-not-allowed text-ink font-semibold text-[0.88rem] cursor-pointer transition-all duration-200 focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 flex items-center gap-1.5"
+              className={`flex-shrink-0 px-5 py-[0.7rem] rounded-full disabled:cursor-not-allowed font-semibold text-[0.88rem] cursor-pointer transition-all duration-200 flex items-center gap-1.5 ${
+                (isSunrise || isSunset)
+                  ? "bg-ink text-paper hover:bg-ink/85 disabled:bg-ink/50 focus-visible:outline-ink"
+                  : "bg-gold text-ink hover:bg-amber-400 disabled:bg-gold/50 focus-visible:outline-gold"
+              } focus-visible:outline-2 focus-visible:outline-offset-2`}
               aria-label="Submit Search"
             >
               {isLoadingWeather && (
-                <svg className="animate-spin h-3.5 w-3.5 text-ink" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className={`animate-spin h-3.5 w-3.5 ${(isSunrise || isSunset) ? "text-paper" : "text-ink"}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
@@ -1797,11 +1817,15 @@ export default function Home() {
             <button
               onClick={handleGeolocation}
               disabled={isLoadingWeather}
-              className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-white/8 border border-white/16 text-paper-dim cursor-pointer flex items-center justify-center transition-all duration-200 hover:bg-white/15 hover:text-paper focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 disabled:opacity-50"
+              className={`flex-shrink-0 w-[38px] h-[38px] rounded-full cursor-pointer flex items-center justify-center transition-all duration-200 disabled:opacity-50 ${
+                (isSunrise || isSunset)
+                  ? "bg-ink/6 border border-ink/14 text-ink/70 hover:bg-ink/12 hover:text-ink focus-visible:outline-ink"
+                  : "bg-white/8 border border-white/16 text-paper-dim hover:bg-white/15 hover:text-paper focus-visible:outline-gold"
+              } focus-visible:outline-2 focus-visible:outline-offset-2`}
               aria-label="Use my current location"
             >
               {isLoadingWeather ? (
-                <svg className="animate-spin h-3.5 w-3.5 text-paper" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className={`animate-spin h-3.5 w-3.5 ${(isSunrise || isSunset) ? "text-ink" : "text-paper"}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
@@ -1826,7 +1850,7 @@ export default function Home() {
             <div className="py-12 flex flex-col items-start justify-center gap-4 animate-pulse">
               <div className="flex items-center gap-3">
                 <span className="w-5 h-5 border-2 border-gold border-t-transparent rounded-full animate-spin"></span>
-                <span className="font-body text-[0.95rem] font-medium text-gold tracking-[0.02em]">Querying WeatherMind AI...</span>
+                <span className={`font-body text-[0.95rem] font-medium tracking-[0.02em] ${(isSunrise || isSunset) ? "text-[#8F4F00]" : "text-gold"}`}>Querying WeatherMind AI...</span>
               </div>
               <div className="font-display text-[2rem] font-light text-paper/85 leading-tight max-w-[600px]">
                 Analyzing historical weather anomalies and generating packing intelligence...
@@ -1834,7 +1858,7 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <div className="font-body text-[0.95rem] font-medium text-gold tracking-[0.02em] mb-2 print:text-gold-deep">{selectedCity.condition}</div>
+              <div className={`font-body text-[0.95rem] font-medium tracking-[0.02em] mb-2 ${(isSunrise || isSunset) ? "text-[#8F4F00]" : "text-gold"} print:text-gold-deep`}>{selectedCity.condition}</div>
               <div className="flex items-end gap-[1.75rem] flex-wrap mb-[1.1rem]">
                 <div className="font-display text-[clamp(5.5rem,14vw,9.5rem)] font-light leading-[0.85] text-paper tracking-[-0.02em] print:text-ink">
                   {selectedCity.temp}<sup className="text-[0.35em] font-light relative top-[-0.5em]">°</sup>
