@@ -226,25 +226,9 @@ export interface CityData {
   }[];
   isAiPlaceholder?: boolean;
 }
-const DEFAULT_PLACES = [
-  { name: "City Center", image: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=300&h=220&fit=crop", desc: "The vibrant heart of the city, perfect for local dining, architecture tours, and shopping." },
-  { name: "Historical Old Town", image: "https://images.unsplash.com/photo-1449034446853-66c86144b0ad?w=300&h=220&fit=crop", desc: "A preserved historical neighborhood showcasing classical architecture, cobblestone alleys, and museum sites." },
-  { name: "Scenic Viewpoint", image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=300&h=220&fit=crop", desc: "A picturesque panoramic overlook that highlights the skyline, surrounding mountains, or water bodies." }
-];
+const DEFAULT_PLACES: any[] = [];
 
-const CATEGORY_IMAGES: Record<string, string> = {
-  beach: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300&h=220&fit=crop",
-  temple: "https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?w=300&h=220&fit=crop",
-  nature: "https://images.unsplash.com/photo-1448375240586-882707db888b?w=300&h=220&fit=crop",
-  park: "https://images.unsplash.com/photo-1519331379826-f10be5486c6f?w=300&h=220&fit=crop",
-  museum: "https://images.unsplash.com/photo-1597923890187-ad3eb3017266?w=300&h=220&fit=crop",
-  market: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=300&h=220&fit=crop",
-  monument: "https://images.unsplash.com/photo-1564507592333-c60657eea523?w=300&h=220&fit=crop",
-  harbor: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=300&h=220&fit=crop",
-  food: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=300&h=220&fit=crop",
-  city: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=300&h=220&fit=crop",
-  waterfall: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=300&h=220&fit=crop"
-};
+const CATEGORY_IMAGES: Record<string, string> = {};
 
 const wikiImageCache = new Map<string, string>();
 
@@ -693,10 +677,63 @@ export async function getWeatherData(cityName: string, skipAI: boolean = false):
                   }
                 }
 
-                // 3. Fallback to generic category-based photo if all else fails
+                // 3. Fallback: try searching Wikipedia for the city name itself to get a general city image dynamically
                 if (!imgUrl) {
-                  const cat = (p.category || 'city').toLowerCase().trim();
-                  imgUrl = CATEGORY_IMAGES[cat] || CATEGORY_IMAGES.city;
+                  try {
+                    const cityQuery = name;
+                    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cityQuery)}&utf8=&format=json&origin=*`;
+                    const searchRes = await axios.get(searchUrl, {
+                      headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
+                      timeout: 1000
+                    });
+                    const searchResults = searchRes.data?.query?.search;
+                    if (searchResults && searchResults.length > 0) {
+                      const pageTitle = searchResults[0].title;
+                      const imgInfoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
+                      const imgInfoRes = await axios.get(imgInfoUrl, {
+                        headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
+                        timeout: 1000
+                      });
+                      const pages = imgInfoRes.data?.query?.pages;
+                      if (pages) {
+                        const pageId = Object.keys(pages)[0];
+                        if (pageId && pages[pageId]?.thumbnail?.source) {
+                          imgUrl = pages[pageId].thumbnail.source;
+                        }
+                      }
+                    }
+                  } catch (err: any) {
+                    console.warn(`[Wikipedia City Fallback Search] Failed for "${name}":`, err.message);
+                  }
+                }
+
+                // 4. Final fallback: Search Commons for the category name dynamically to return a real API-resolved image
+                if (!imgUrl) {
+                  try {
+                    const cat = (p.category || 'city').toLowerCase().trim();
+                    const commonsUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(cat)}&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`;
+                    const commonsRes = await axios.get(commonsUrl, {
+                      headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
+                      timeout: 1000
+                    });
+                    const pages = commonsRes.data?.query?.pages;
+                    if (pages) {
+                      const firstPageId = Object.keys(pages)[0];
+                      const imgInfo = pages[firstPageId]?.imageinfo?.[0];
+                      if (imgInfo?.thumburl) {
+                        imgUrl = imgInfo.thumburl;
+                      } else if (imgInfo?.url) {
+                        imgUrl = imgInfo.url;
+                      }
+                    }
+                  } catch (err: any) {
+                    console.warn(`[Wikimedia Commons Category Fallback] Failed for category "${p.category}":`, err.message);
+                  }
+                }
+
+                // If still empty (e.g. API is down/throttled), use an empty string but NOT a hardcoded image
+                if (!imgUrl) {
+                  imgUrl = "";
                 }
 
                 return {
