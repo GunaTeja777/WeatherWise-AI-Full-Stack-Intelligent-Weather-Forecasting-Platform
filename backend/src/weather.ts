@@ -1,6 +1,196 @@
 import axios from 'axios';
 import { generateAIAssistance } from './gemini';
 
+// Helper to parse coordinates from a string query
+function parseCoordinates(query: string): { lat: number; lon: number } | null {
+  const q = query.trim();
+  
+  // 1. Simple decimal format: "40.7128, -74.0060" or "40.7128 -74.0060"
+  const decimalRegex = /^\s*([-+]?\d+(?:\.\d+)?)\s*[\s,]\s*([-+]?\d+(?:\.\d+)?)\s*$/;
+  const decMatch = q.match(decimalRegex);
+  if (decMatch) {
+    const lat = parseFloat(decMatch[1]);
+    const lon = parseFloat(decMatch[2]);
+    if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return { lat, lon };
+    }
+  }
+
+  // 2. Clear prefixes or degrees: "40.7128° N, 74.0060° W"
+  const cleaned = q.replace(/(?:lat(?:itude)?|lon(?:gitude)?|coords?|deg):?/gi, '').trim();
+  
+  const dirRegex = /^\s*(\d+(?:\.\d+)?)\s*°?\s*([NS])\s*[\s,]\s*(\d+(?:\.\d+)?)\s*°?\s*([EW])\s*$/i;
+  const dirMatch = cleaned.match(dirRegex);
+  if (dirMatch) {
+    let lat = parseFloat(dirMatch[1]);
+    const latDir = dirMatch[2].toUpperCase();
+    let lon = parseFloat(dirMatch[3]);
+    const lonDir = dirMatch[4].toUpperCase();
+    
+    if (latDir === 'S') lat = -lat;
+    if (lonDir === 'W') lon = -lon;
+    
+    if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return { lat, lon };
+    }
+  }
+
+  const dirRegex2 = /^\s*([NS])\s*(\d+(?:\.\d+)?)\s*°?\s*[\s,]\s*([EW])\s*(\d+(?:\.\d+)?)\s*°?\s*$/i;
+  const dirMatch2 = cleaned.match(dirRegex2);
+  if (dirMatch2) {
+    const latDir = dirMatch2[1].toUpperCase();
+    let lat = parseFloat(dirMatch2[2]);
+    const lonDir = dirMatch2[3].toUpperCase();
+    let lon = parseFloat(dirMatch2[4]);
+    
+    if (latDir === 'S') lat = -lat;
+    if (lonDir === 'W') lon = -lon;
+    
+    if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return { lat, lon };
+    }
+  }
+
+  return null;
+}
+
+// Unified location resolver that handles Cities, Towns, Zip/Postal Codes, GPS Coordinates, and Landmarks.
+export async function resolveLocation(
+  query: string,
+  owmKey: string
+): Promise<{ name: string; lat: number; lon: number; country: string }> {
+  const trimmed = query.trim();
+
+  // 1. Check if the query is a GPS Coordinate
+  const coords = parseCoordinates(trimmed);
+  if (coords) {
+    console.log(`[Geocode] Query matched GPS coordinates: lat=${coords.lat}, lon=${coords.lon}`);
+    
+    // Reverse geocode to get a clean name
+    try {
+      const reverseUrl = `http://api.openweathermap.org/geo/1.0/reverse?lat=${coords.lat}&lon=${coords.lon}&limit=1&appid=${owmKey}`;
+      const res = await axios.get(reverseUrl);
+      if (res.data && res.data.length > 0) {
+        const item = res.data[0];
+        return {
+          name: item.name,
+          lat: coords.lat,
+          lon: coords.lon,
+          country: item.country || 'GPS'
+        };
+      }
+    } catch (err: any) {
+      console.warn(`[Geocode] OWM Reverse geocoding failed:`, err.message);
+    }
+
+    // Try Nominatim reverse geocoding as fallback for coordinates
+    try {
+      const reverseUrl = `https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lon}&format=json`;
+      const res = await axios.get(reverseUrl, {
+        headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' }
+      });
+      if (res.data && res.data.address) {
+        const addr = res.data.address;
+        const name = addr.tourism || addr.attraction || addr.landmark || addr.amenity || addr.historic ||
+                     addr.city || addr.town || addr.village || addr.suburb || `${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`;
+        const country = addr.country || addr.country_code?.toUpperCase() || 'GPS';
+        return { name, lat: coords.lat, lon: coords.lon, country };
+      }
+    } catch (err: any) {
+      console.warn(`[Geocode] Nominatim Reverse geocoding failed:`, err.message);
+    }
+
+    // Default to the coordinates themselves
+    return {
+      name: `${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`,
+      lat: coords.lat,
+      lon: coords.lon,
+      country: 'GPS'
+    };
+  }
+
+  // 2. Try Nominatim Geocoding API (Supports Landmarks, Zip codes, Towns, Cities, etc.)
+  try {
+    console.log(`[Geocode] Attempting Nominatim geocoding for: "${trimmed}"`);
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&format=json&limit=1&addressdetails=1`;
+    const res = await axios.get(nominatimUrl, {
+      headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
+      timeout: 4000
+    });
+
+    if (res.data && res.data.length > 0) {
+      const item = res.data[0];
+      const lat = parseFloat(item.lat);
+      const lon = parseFloat(item.lon);
+      const addr = item.address || {};
+
+      let name = addr.tourism || addr.attraction || addr.landmark || addr.amenity || addr.historic ||
+                 addr.city || addr.town || addr.village || addr.suburb || item.name || trimmed;
+
+      // Enrich name if it is a landmark/zip code
+      if (addr.tourism || addr.attraction || addr.landmark || addr.amenity || addr.historic) {
+        const cityOrTown = addr.city || addr.town || addr.village || '';
+        if (cityOrTown) {
+          name = `${name}, ${cityOrTown}`;
+        }
+      } else if (addr.postcode && addr.postcode.toLowerCase() === trimmed.toLowerCase()) {
+        const cityOrTown = addr.city || addr.town || addr.village || addr.state || '';
+        if (cityOrTown) {
+          name = `${addr.postcode} (${cityOrTown})`;
+        }
+      }
+
+      const country = addr.country || addr.country_code?.toUpperCase() || 'Unknown';
+      console.log(`[Geocode] Nominatim resolved to: ${name}, ${country} (${lat}, ${lon})`);
+      return { name, lat, lon, country };
+    }
+  } catch (err: any) {
+    console.warn(`[Geocode] Nominatim search failed or timed out:`, err.message);
+  }
+
+  // 3. Try Open-Meteo Geocoding API as fallback (Fast and free fallback for cities, towns, and zip codes)
+  try {
+    console.log(`[Geocode] Attempting Open-Meteo geocoding fallback for: "${trimmed}"`);
+    const openMeteoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(trimmed)}&count=1&language=en&format=json`;
+    const res = await axios.get(openMeteoUrl, { timeout: 3000 });
+    
+    if (res.data && res.data.results && res.data.results.length > 0) {
+      const item = res.data.results[0];
+      const lat = item.latitude;
+      const lon = item.longitude;
+      const name = item.name + (item.admin1 ? `, ${item.admin1}` : '');
+      const country = item.country || 'Unknown';
+      console.log(`[Geocode] Open-Meteo resolved to: ${name}, ${country} (${lat}, ${lon})`);
+      return { name, lat, lon, country };
+    }
+  } catch (err: any) {
+    console.warn(`[Geocode] Open-Meteo search failed or timed out:`, err.message);
+  }
+
+  // 4. Final fallback: OpenWeatherMap Geocoding API
+  try {
+    console.log(`[Geocode] Attempting OpenWeatherMap direct geocoding fallback for: "${trimmed}"`);
+    const geoUrl = `http://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(trimmed)}&limit=1&appid=${owmKey}`;
+    const res = await axios.get(geoUrl, { timeout: 3000 });
+    
+    if (res.data && res.data.length > 0) {
+      const item = res.data[0];
+      console.log(`[Geocode] OpenWeatherMap resolved to: ${item.name}, ${item.country} (${item.lat}, ${item.lon})`);
+      return {
+        name: item.name,
+        lat: item.lat,
+        lon: item.lon,
+        country: item.country
+      };
+    }
+  } catch (err: any) {
+    console.error(`[Geocode] OpenWeatherMap geocoding fallback failed:`, err.message);
+  }
+
+  throw new Error(`Location "${trimmed}" not found.`);
+}
+
+
 export interface CityData {
   city: string;
   country: string;
@@ -163,15 +353,8 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
   }
 
   try {
-    // 1. Geocoding call
-    const geoUrl = `http://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(cityName)}&limit=1&appid=${OWM_KEY}`;
-    const geoResponse = await axios.get(geoUrl);
-    
-    if (!geoResponse.data || geoResponse.data.length === 0) {
-      throw new Error(`City "${cityName}" not found.`);
-    }
-
-    const { name, lat, lon, country } = geoResponse.data[0];
+    // 1. Unified geocoding resolution
+    const { name, lat, lon, country } = await resolveLocation(cityName, OWM_KEY);
 
     // 2. Fetch current weather & 5-day forecast
     const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${OWM_KEY}`;
@@ -518,14 +701,8 @@ export async function getHistoricalWeatherData(
     throw new Error("OpenWeatherMap API Key is required for historical weather queries.");
   }
 
-  // 1. Resolve city to lat/lon
-  const geoUrl = `http://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(cityName)}&limit=1&appid=${OWM_KEY}`;
-  const geoResponse = await axios.get(geoUrl);
-  if (!geoResponse.data || geoResponse.data.length === 0) {
-    throw new Error(`City "${cityName}" not found.`);
-  }
-
-  const { lat, lon } = geoResponse.data[0];
+  // 1. Unified geocoding resolution
+  const { lat, lon } = await resolveLocation(cityName, OWM_KEY);
 
   // 2. Fetch from Open-Meteo Archive API
   const archiveUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;

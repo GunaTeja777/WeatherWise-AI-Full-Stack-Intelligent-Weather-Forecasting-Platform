@@ -100,13 +100,29 @@ app.get('/api/weather/reverse', async (req: Request, res: Response): Promise<voi
     const response = await axios.get(reverseGeoUrl);
     if (response.data && response.data.length > 0) {
       res.json({ city: response.data[0].name });
-    } else {
-      res.status(404).json({ error: 'No city found for these coordinates' });
+      return;
     }
   } catch (error: any) {
-    console.error('Error in /api/weather/reverse:', error.message);
-    res.status(500).json({ error: 'Failed to reverse geocode location' });
+    console.warn('OWM reverse geocoding failed:', error.message);
   }
+
+  // Fallback to Nominatim reverse geocoding
+  try {
+    const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
+    const response = await axios.get(nominatimUrl, {
+      headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' }
+    });
+    if (response.data && response.data.address) {
+      const addr = response.data.address;
+      const city = addr.city || addr.town || addr.village || addr.suburb || `${lat}, ${lon}`;
+      res.json({ city });
+      return;
+    }
+  } catch (error: any) {
+    console.error('Nominatim reverse geocoding fallback failed:', error.message);
+  }
+
+  res.status(404).json({ error: 'No city found for these coordinates' });
 });
 
 // GET /api/weather/history (Date range query)

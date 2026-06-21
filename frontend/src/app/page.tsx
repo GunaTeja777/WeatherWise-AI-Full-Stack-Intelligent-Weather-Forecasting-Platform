@@ -1735,14 +1735,14 @@ export default function Home() {
         <div className="relative z-10 flex-1 flex flex-col justify-end px-8 pb-10 max-w-[1180px] mx-auto w-full print:p-0">
           {/* Helper label explaining custom search capability */}
           <div className="mb-2 text-[0.82rem] text-gold/80 font-medium tracking-[0.01em] print:hidden">
-            Enter any global city to fetch real-time weather &amp; local attractions
+            Enter city, town, zip/postal code, landmark, or GPS coordinates (lat, lon)
           </div>
           <div className="flex items-center gap-[0.65rem] mb-[2rem] max-w-[500px] w-full relative z-30 print:hidden" ref={searchContainerRef}>
             <div className="relative flex-1">
               <input
                 type="text"
                 className="bg-white/8 border border-white/16 rounded-full text-paper font-body text-[0.92rem] px-[1.3rem] py-[0.7rem] w-full outline-none backdrop-blur-[6px] transition-all duration-200 placeholder:text-paper-faint focus:border-gold/60 focus:bg-white/12 disabled:opacity-50"
-                placeholder={isLoadingWeather ? "AI Intelligence loading..." : "Search e.g. London, Kakinada, Tokyo..."}
+                placeholder={isLoadingWeather ? "AI Intelligence loading..." : "Search e.g. Eiffel Tower, 90210, 40.71, -74.01..."}
                 aria-label="Search for a location"
                 value={searchQuery}
                 onChange={(e) => {
@@ -2297,11 +2297,11 @@ export default function Home() {
           <div className="bg-card border border-card-line rounded-[18px] p-6">
             <form onSubmit={handleHistoricalQuery} className="grid grid-cols-4 gap-4 items-end max-md:grid-cols-1">
               <div>
-                <label className="block text-[0.75rem] font-semibold uppercase tracking-wider text-slate mb-1">City</label>
+                <label className="block text-[0.75rem] font-semibold uppercase tracking-wider text-slate mb-1">Location</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Kakinada, Tokyo"
+                  placeholder="e.g. 90210, Tokyo, 40.71, -74.01"
                   value={histCity}
                   onChange={(e) => setHistCity(e.target.value)}
                   className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all"
@@ -2502,12 +2502,12 @@ export default function Home() {
               )}
 
               <div>
-                <label className="block text-[0.75rem] font-semibold uppercase tracking-wider text-slate mb-1">Destination City</label>
+                <label className="block text-[0.75rem] font-semibold uppercase tracking-wider text-slate mb-1">Destination Location</label>
                 <input
                   type="text"
                   required
                   disabled={modalSaving}
-                  placeholder="e.g. Paris, Tokyo, Istanbul"
+                  placeholder="e.g. Eiffel Tower, Tokyo, 90210"
                   value={modalCity}
                   onChange={(e) => setModalCity(e.target.value)}
                   className="w-full bg-white border border-card-line rounded-lg px-3 py-2 text-ink text-[0.9rem] outline-none focus:border-gold-deep focus:ring-1 focus:ring-gold-deep transition-all disabled:opacity-50"
