@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { generateAIAssistance } from './gemini';
+import { getCache, setCache } from './redis';
 
 // Helper to parse coordinates from a string query
 function parseCoordinates(query: string): { lat: number; lon: number } | null {
@@ -110,9 +111,29 @@ export async function resolveLocation(
     };
   }
 
-  // 2. Try Nominatim Geocoding API (Supports Landmarks, Zip codes, Towns, Cities, etc.)
+  // 2. Try OpenWeatherMap Geocoding API first (very fast and matches standard queries)
   try {
-    console.log(`[Geocode] Attempting Nominatim geocoding for: "${trimmed}"`);
+    console.log(`[Geocode] Attempting OpenWeatherMap direct geocoding for: "${trimmed}"`);
+    const geoUrl = `http://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(trimmed)}&limit=1&appid=${owmKey}`;
+    const res = await axios.get(geoUrl, { timeout: 1500 });
+    
+    if (res.data && res.data.length > 0) {
+      const item = res.data[0];
+      console.log(`[Geocode] OpenWeatherMap resolved to: ${item.name}, ${item.country} (${item.lat}, ${item.lon})`);
+      return {
+        name: item.name,
+        lat: item.lat,
+        lon: item.lon,
+        country: item.country
+      };
+    }
+  } catch (err: any) {
+    console.warn(`[Geocode] OpenWeatherMap direct geocoding first attempt failed:`, err.message);
+  }
+
+  // 3. Try Nominatim Geocoding API (Supports Landmarks, Zip codes, Towns, Cities, etc.)
+  try {
+    console.log(`[Geocode] Attempting Nominatim geocoding fallback for: "${trimmed}"`);
     const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&format=json&limit=1&addressdetails=1`;
     const res = await axios.get(nominatimUrl, {
       headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
@@ -149,7 +170,7 @@ export async function resolveLocation(
     console.warn(`[Geocode] Nominatim search failed or timed out:`, err.message);
   }
 
-  // 3. Try Open-Meteo Geocoding API as fallback (Fast and free fallback for cities, towns, and zip codes)
+  // 4. Try Open-Meteo Geocoding API as fallback (Fast and free fallback for cities, towns, and zip codes)
   try {
     console.log(`[Geocode] Attempting Open-Meteo geocoding fallback for: "${trimmed}"`);
     const openMeteoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(trimmed)}&count=1&language=en&format=json`;
@@ -166,26 +187,6 @@ export async function resolveLocation(
     }
   } catch (err: any) {
     console.warn(`[Geocode] Open-Meteo search failed or timed out:`, err.message);
-  }
-
-  // 4. Final fallback: OpenWeatherMap Geocoding API
-  try {
-    console.log(`[Geocode] Attempting OpenWeatherMap direct geocoding fallback for: "${trimmed}"`);
-    const geoUrl = `http://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(trimmed)}&limit=1&appid=${owmKey}`;
-    const res = await axios.get(geoUrl, { timeout: 1500 });
-    
-    if (res.data && res.data.length > 0) {
-      const item = res.data[0];
-      console.log(`[Geocode] OpenWeatherMap resolved to: ${item.name}, ${item.country} (${item.lat}, ${item.lon})`);
-      return {
-        name: item.name,
-        lat: item.lat,
-        lon: item.lon,
-        country: item.country
-      };
-    }
-  } catch (err: any) {
-    console.error(`[Geocode] OpenWeatherMap geocoding fallback failed:`, err.message);
   }
 
   throw new Error(`Location "${trimmed}" not found.`);
@@ -343,33 +344,22 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
     endOffset.setDate(today.getDate() + 5);
     const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
-    // Create 5 concurrent historical archive requests to Open-Meteo
-    const histPromises = [];
-    for (let offsetYears = 1; offsetYears <= 5; offsetYears++) {
-      const histStart = new Date(today);
-      histStart.setFullYear(today.getFullYear() - offsetYears);
-      const histEnd = new Date(endOffset);
-      histEnd.setFullYear(endOffset.getFullYear() - offsetYears);
+    // Fetch a single consolidated historical archive range from Open-Meteo (from 5 years ago to 1 year ago)
+    const histStart = new Date(today);
+    histStart.setFullYear(today.getFullYear() - 5);
+    const histEnd = new Date(endOffset);
+    histEnd.setFullYear(endOffset.getFullYear() - 1);
 
-      const openMeteoUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(histStart)}&end_date=${formatDate(histEnd)}&daily=rain_sum&timezone=auto`;
-      histPromises.push(
-        axios.get(openMeteoUrl)
-          .then(res => {
-            if (res.data && res.data.daily && res.data.daily.rain_sum) {
-              const sum: number = res.data.daily.rain_sum.reduce((a: number, b: number) => a + (b || 0), 0);
-              return { sum, success: true };
-            }
-            return { sum: 0, success: false };
-          })
-          .catch(() => ({ sum: 0, success: false }))
-      );
-    }
+    const openMeteoUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(histStart)}&end_date=${formatDate(histEnd)}&daily=rain_sum&timezone=auto`;
 
-    // 3. Launch OWM Forecast, OWM AQI, and all 5 Open-Meteo requests concurrently!
-    const [forecastResponse, aqiResponse, ...histResults] = await Promise.all([
+    // 3. Launch OWM Forecast, OWM AQI, and consolidated Open-Meteo requests concurrently!
+    const [forecastResponse, aqiResponse, histResponse] = await Promise.all([
       axios.get(forecastUrl),
       axios.get(aqiUrl).catch(() => null), // Gracefully handle if AQI call fails
-      ...histPromises
+      axios.get(openMeteoUrl).catch((err) => {
+        console.warn('[Historical API] Open-Meteo historical call failed:', err.message);
+        return null;
+      })
     ]);
 
     // 4. Process Air Pollution (AQI)
@@ -404,12 +394,31 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
       let totalHistoricalRain = 0;
       let countYears = 0;
 
-      histResults.forEach(res => {
-        if (res.success) {
-          totalHistoricalRain += res.sum;
-          countYears++;
+      if (histResponse && histResponse.data && histResponse.data.daily && histResponse.data.daily.time && histResponse.data.daily.rain_sum) {
+        const daily = histResponse.data.daily;
+        
+        for (let offsetYears = 1; offsetYears <= 5; offsetYears++) {
+          const targetStart = new Date(today);
+          targetStart.setFullYear(today.getFullYear() - offsetYears);
+          const targetEnd = new Date(endOffset);
+          targetEnd.setFullYear(endOffset.getFullYear() - offsetYears);
+          
+          const targetStartStr = formatDate(targetStart);
+          const targetEndStr = formatDate(targetEnd);
+
+          const startIndex = daily.time.indexOf(targetStartStr);
+          const endIndex = daily.time.indexOf(targetEndStr);
+
+          if (startIndex !== -1 && endIndex !== -1) {
+            const yearSum = daily.rain_sum
+              .slice(startIndex, endIndex + 1)
+              .reduce((a: number, b: number) => a + (b || 0), 0);
+            
+            totalHistoricalRain += yearSum;
+            countYears++;
+          }
         }
-      });
+      }
 
       const avgHistRain = countYears > 0 ? (totalHistoricalRain / countYears) : 5;
       
@@ -418,8 +427,8 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
       }
       
       historicalDataSummary = `For this exact calendar week over the last 5 years, ${name} averaged ${avgHistRain.toFixed(1)}mm of cumulative rain. The upcoming 5-day forecast shows ${forecastRainSum.toFixed(1)}mm.`;
-    } catch {
-      // ignore
+    } catch (err: any) {
+      console.warn('[Historical processing] Failed to process historical data:', err.message);
     }
 
     // Process OpenWeatherMap forecast list into 5 days
@@ -571,10 +580,19 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
             const attractionName = p.name || 'Local Attraction';
             const attractionKey = attractionName.toLowerCase().trim();
             let imgUrl = '';
-            
-            // Check in-memory cache first
+              // Check in-memory and Redis cache first
             if (wikiImageCache.has(attractionKey)) {
               imgUrl = wikiImageCache.get(attractionKey) || '';
+            } else {
+              try {
+                const cachedImg = await getCache(`wiki-img:${attractionKey}`);
+                if (cachedImg) {
+                  imgUrl = cachedImg;
+                  wikiImageCache.set(attractionKey, imgUrl);
+                }
+              } catch (cacheErr: any) {
+                console.warn(`[Places Image Cache] Redis read failed for "${attractionName}":`, cacheErr.message);
+              }
             }
 
             if (!imgUrl) {
@@ -660,9 +678,14 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
               }
             }
 
-            // Save to in-memory cache if we resolved a valid Wikimedia/Wikipedia URL
+            // Save to in-memory cache and Redis if we resolved a valid Wikimedia/Wikipedia URL
             if (imgUrl && !imgUrl.includes("unsplash.com")) {
               wikiImageCache.set(attractionKey, imgUrl);
+              try {
+                await setCache(`wiki-img:${attractionKey}`, imgUrl, 86400 * 7); // Cache for 7 days
+              } catch (cacheErr: any) {
+                console.warn(`[Places Image Cache] Redis write failed for "${attractionName}":`, cacheErr.message);
+              }
             }
 
             // 3. Fallback to generic category-based photo if all else fails

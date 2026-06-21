@@ -62,7 +62,7 @@ export async function generateAIAssistance(
           'HTTP-Referer': 'http://localhost:3000',
           'X-Title': 'WeatherWise-AI'
         },
-        timeout: 25000 // 25s timeout
+        timeout: 8000 // 8s timeout
       }
     );
 
@@ -105,7 +105,7 @@ export async function generateAIAssistance(
             'HTTP-Referer': 'http://localhost:3000',
             'X-Title': 'WeatherWise-AI'
           },
-          timeout: 25000
+          timeout: 6000 // 6s timeout
         }
       );
 

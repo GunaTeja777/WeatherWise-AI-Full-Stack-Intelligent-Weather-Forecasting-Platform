@@ -1089,7 +1089,7 @@ export default function Home() {
     const startTime = Date.now();
 
     try {
-      // Try to fetch from backend first to get dynamic AI and real weather/images
+      // 1. Try to fetch from backend first to get dynamic AI and real weather/images
       try {
         const res = await fetch(`${BACKEND_URL}/api/weather?city=${encodeURIComponent(cityName)}`);
         if (res.ok) {
@@ -1097,36 +1097,36 @@ export default function Home() {
           setSelectedCity(data);
           setSearchQuery(data.city);
           setShowSuggestions(false);
-          setIsLoadingWeather(false);
           return;
+        } else {
+          // If the backend returned a non-OK status, try to extract error message
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.error || `City "${cityName}" not found.`;
+          
+          // If it's a pre-configured city, fallback to local DB instead of throwing
+          if (CITIES_DB[key]) {
+            console.log("Backend failed but city is pre-configured, falling back to local DB.");
+            setSelectedCity(CITIES_DB[key]);
+            setSearchQuery(CITIES_DB[key].city);
+            setShowSuggestions(false);
+            return;
+          }
+          
+          throw new Error(errMsg);
         }
       } catch (backendErr) {
-        console.warn("Backend fetch failed, trying local pre-configured DB:", backendErr);
-      }
-
-      // Check if it is a local pre-configured city
-      if (CITIES_DB[key]) {
-        setSelectedCity(CITIES_DB[key]);
-        setSearchQuery(CITIES_DB[key].city);
-        setShowSuggestions(false);
+        console.warn("Backend fetch failed, checking local pre-configured DB:", backendErr);
         
-        const elapsed = Date.now() - startTime;
-        if (elapsed < 500) {
-          await delay(500 - elapsed);
+        // If we caught a network/connection error, fallback to local DB if available
+        if (CITIES_DB[key]) {
+          setSelectedCity(CITIES_DB[key]);
+          setSearchQuery(CITIES_DB[key].city);
+          setShowSuggestions(false);
+          return;
         }
-        setIsLoadingWeather(false);
-        return;
-      }
-
-      const res = await fetch(`${BACKEND_URL}/api/weather?city=${encodeURIComponent(cityName)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedCity(data);
-        setSearchQuery(data.city);
-        setShowSuggestions(false);
-      } else {
-        const errData = await res.json();
-        throw new Error(errData.error || `City "${cityName}" not found.`);
+        
+        // Otherwise, propagate the original error
+        throw backendErr;
       }
     } catch (err) {
       console.error("Weather fetch failed:", err);
