@@ -583,26 +583,43 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
             
             // 1. Try fetching from Wikipedia using dynamic Search first
             try {
-              const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(attractionName + ' ' + name)}&utf8=&format=json&origin=*`;
+              const locationContext = (country && typeof country === 'string') ? country : name;
+              const query = `${attractionName}, ${locationContext}`;
+              const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=&format=json&origin=*`;
               const searchRes = await axios.get(searchUrl, {
                 headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' }
               });
               const searchResults = searchRes.data?.query?.search;
               
               if (searchResults && searchResults.length > 0) {
-                const pageTitle = searchResults[0].title;
-                
-                // Heuristic: Ensure the page title shares at least one meaningful word with the attraction name
-                const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
-                const attractionWords = normalize(attractionName).filter(w => w !== name.toLowerCase() && w.length > 2);
-                const titleWords = normalize(pageTitle);
-                const hasKeywordMatch = attractionWords.length === 0 || attractionWords.some(w => titleWords.includes(w));
+                let pageTitle = '';
+                for (const item of searchResults) {
+                  const title = item.title;
+                  
+                  // Skip if the page title is exactly the geocoded city name or country name (generic city pages)
+                  if (
+                    title.toLowerCase().trim() === name.toLowerCase().trim() || 
+                    title.toLowerCase().trim() === country.toLowerCase().trim()
+                  ) {
+                    console.log(`[Wikipedia Search] Skipped generic page "${title}" for attraction "${attractionName}"`);
+                    continue;
+                  }
+                  
+                  // Heuristic: Ensure the page title shares at least one meaningful word with the attraction name
+                  const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+                  const attractionWords = normalize(attractionName).filter(w => w !== name.toLowerCase() && w !== country.toLowerCase() && w.length > 2);
+                  const titleWords = normalize(title);
+                  const hasKeywordMatch = attractionWords.length === 0 || attractionWords.some(w => titleWords.includes(w));
+                  
+                  if (hasKeywordMatch) {
+                    pageTitle = title;
+                    break;
+                  } else {
+                    console.log(`[Wikipedia Search] Skipped mismatched page "${title}" for attraction "${attractionName}" (no keyword match)`);
+                  }
+                }
 
-                if (pageTitle.toLowerCase().trim() === name.toLowerCase().trim()) {
-                  console.log(`[Wikipedia Search] Skipped generic city page "${pageTitle}" for attraction "${attractionName}"`);
-                } else if (!hasKeywordMatch) {
-                  console.log(`[Wikipedia Search] Skipped mismatched page "${pageTitle}" for attraction "${attractionName}" (no keyword match)`);
-                } else {
+                if (pageTitle) {
                   const imgInfoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
                   const imgInfoRes = await axios.get(imgInfoUrl, {
                     headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' }
@@ -612,6 +629,7 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
                     const pageId = Object.keys(pages)[0];
                     if (pageId && pages[pageId]?.thumbnail?.source) {
                       imgUrl = pages[pageId].thumbnail.source;
+                      console.log(`[Wikipedia Search] Successfully matched image for "${attractionName}" via "${pageTitle}": ${imgUrl}`);
                     }
                   }
                 }
@@ -623,7 +641,9 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
             // 2. Fallback to Wikimedia Commons search if Wikipedia search had no image
             if (!imgUrl) {
               try {
-                const commonsUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(attractionName + ' ' + name)}&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`;
+                const locationContext = (country && typeof country === 'string') ? country : name;
+                const query = `${attractionName}, ${locationContext}`;
+                const commonsUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`;
                 const commonsRes = await axios.get(commonsUrl, {
                   headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' }
                 });
