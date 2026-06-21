@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import { initRedis, getCache, setCache } from './redis';
-import { getWeatherData, getHistoricalWeatherData } from './weather';
+import { getWeatherData, getHistoricalWeatherData } from './weather'; 
 import axios from 'axios';
 import PDFDocument from 'pdfkit';
 
