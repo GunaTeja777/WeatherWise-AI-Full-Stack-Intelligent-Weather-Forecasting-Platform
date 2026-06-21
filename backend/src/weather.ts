@@ -224,6 +224,7 @@ export interface CityData {
     image: string;
     desc: string;
   }[];
+  isAiPlaceholder?: boolean;
 }
 const DEFAULT_PLACES = [
   { name: "City Center", image: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=300&h=220&fit=crop", desc: "The vibrant heart of the city, perfect for local dining, architecture tours, and shopping." },
@@ -324,7 +325,7 @@ export function generateFallbackCityData(cityKey: string): CityData {
 }
 
 // Main function to fetch full weather data
-export async function getWeatherData(cityName: string): Promise<CityData> {
+export async function getWeatherData(cityName: string, skipAI: boolean = false): Promise<CityData> {
   const OWM_KEY = process.env.OPENWEATHERMAP_API_KEY;
   if (!OWM_KEY) {
     console.log(`[Weather] OWM key missing. Generating fallback data for: ${cityName}`);
@@ -555,155 +556,169 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
 
     const forecastSummary = forecastArray.map(f => `${f.day}: ${f.tempHigh}°/${f.tempLow}° (${f.condition})`).join(', ');
 
-    // 5. Call Gemini for AI assistance
-    const aiData = await generateAIAssistance(
-      name,
-      country,
-      temp,
-      current.weather[0].description,
-      forecastSummary,
-      historicalDataSummary
-    );
+    // Prepare default AI placeholders
+    let aiData = {
+      packingNote: "Analyzing packing recommendations...",
+      healthNote: "Analyzing health advisory...",
+      advisory: "Analyzing weather anomalies...",
+      places: [] as any[]
+    };
+    let places = [] as any[];
+
+    if (!skipAI) {
+      // 5. Call Gemini for AI assistance
+      try {
+        const fetchedAiData = await generateAIAssistance(
+          name,
+          country,
+          temp,
+          current.weather[0].description,
+          forecastSummary,
+          historicalDataSummary
+        );
+        aiData = fetchedAiData;
+
+        if (aiData.places && Array.isArray(aiData.places) && aiData.places.length > 0) {
+          try {
+            places = await Promise.all(
+              aiData.places.map(async (p: any) => {
+                const attractionName = p.name || 'Local Attraction';
+                const attractionKey = attractionName.toLowerCase().trim();
+                let imgUrl = '';
+                // Check in-memory and Redis cache first
+                if (wikiImageCache.has(attractionKey)) {
+                  imgUrl = wikiImageCache.get(attractionKey) || '';
+                } else {
+                  try {
+                    const cachedImg = await getCache(`wiki-img:${attractionKey}`);
+                    if (cachedImg) {
+                      imgUrl = cachedImg;
+                      wikiImageCache.set(attractionKey, imgUrl);
+                    }
+                  } catch (cacheErr: any) {
+                    console.warn(`[Places Image Cache] Redis read failed for "${attractionName}":`, cacheErr.message);
+                  }
+                }
+
+                if (!imgUrl) {
+                  // 1. Try fetching from Wikipedia using dynamic Search first
+                  try {
+                    const locationContext = (country && typeof country === 'string') ? country : name;
+                    const query = `${attractionName}, ${locationContext}`;
+                    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=&format=json&origin=*`;
+                    const searchRes = await axios.get(searchUrl, {
+                      headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
+                      timeout: 1000 // 1s timeout
+                    });
+                    const searchResults = searchRes.data?.query?.search;
+                    
+                    if (searchResults && searchResults.length > 0) {
+                      let pageTitle = '';
+                      for (const item of searchResults) {
+                        const title = item.title;
+                        
+                        // Skip if the page title is exactly the geocoded city name or country name (generic city pages)
+                        if (
+                          title.toLowerCase().trim() === name.toLowerCase().trim() || 
+                          title.toLowerCase().trim() === country.toLowerCase().trim()
+                        ) {
+                          continue;
+                        }
+                        
+                        // Heuristic: Ensure the page title shares at least one meaningful word with the attraction name
+                        const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+                        const attractionWords = normalize(attractionName).filter(w => w !== name.toLowerCase() && w !== country.toLowerCase() && w.length > 2);
+                        const titleWords = normalize(title);
+                        const hasKeywordMatch = attractionWords.length === 0 || attractionWords.some(w => titleWords.includes(w));
+                        
+                        if (hasKeywordMatch) {
+                          pageTitle = title;
+                          break;
+                        }
+                      }
+
+                      if (pageTitle) {
+                        const imgInfoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
+                        const imgInfoRes = await axios.get(imgInfoUrl, {
+                          headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
+                          timeout: 1000 // 1s timeout
+                        });
+                        const pages = imgInfoRes.data?.query?.pages;
+                        if (pages) {
+                          const pageId = Object.keys(pages)[0];
+                          if (pageId && pages[pageId]?.thumbnail?.source) {
+                            imgUrl = pages[pageId].thumbnail.source;
+                            console.log(`[Wikipedia Search] Successfully matched image for "${attractionName}" via "${pageTitle}": ${imgUrl}`);
+                          }
+                        }
+                      }
+                    }
+                  } catch (err: any) {
+                    console.warn(`[Wikipedia Search Image API] Failed for "${attractionName}":`, err.message);
+                  }
+                }
+
+                if (!imgUrl) {
+                  // 2. Fallback to Wikimedia Commons search if Wikipedia search had no image
+                  try {
+                    const locationContext = (country && typeof country === 'string') ? country : name;
+                    const query = `${attractionName}, ${locationContext}`;
+                    const commonsUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`;
+                    const commonsRes = await axios.get(commonsUrl, {
+                      headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
+                      timeout: 1000 // 1s timeout
+                    });
+                    const pages = commonsRes.data?.query?.pages;
+                    if (pages) {
+                      const firstPageId = Object.keys(pages)[0];
+                      const imgInfo = pages[firstPageId]?.imageinfo?.[0];
+                      if (imgInfo?.thumburl) {
+                        imgUrl = imgInfo.thumburl;
+                      } else if (imgInfo?.url) {
+                        imgUrl = imgInfo.url;
+                      }
+                    }
+                  } catch (err: any) {
+                    console.warn(`[Wikimedia Commons API] Failed for "${attractionName}":`, err.message);
+                  }
+                }
+
+                // Save to in-memory cache and Redis if we resolved a valid Wikimedia/Wikipedia URL
+                if (imgUrl && !imgUrl.includes("unsplash.com")) {
+                  wikiImageCache.set(attractionKey, imgUrl);
+                  try {
+                    await setCache(`wiki-img:${attractionKey}`, imgUrl, 86400 * 7); // Cache for 7 days
+                  } catch (cacheErr: any) {
+                    console.warn(`[Places Image Cache] Redis write failed for "${attractionName}":`, cacheErr.message);
+                  }
+                }
+
+                // 3. Fallback to generic category-based photo if all else fails
+                if (!imgUrl) {
+                  const cat = (p.category || 'city').toLowerCase().trim();
+                  imgUrl = CATEGORY_IMAGES[cat] || CATEGORY_IMAGES.city;
+                }
+
+                return {
+                  name: attractionName,
+                  image: imgUrl,
+                  desc: p.desc || 'A scenic local destination worth visiting.'
+                };
+              })
+            );
+          } catch (err: any) {
+            console.error('[Places Image Resolution] Error mapping place data:', err.message);
+          }
+        }
+      } catch (err: any) {
+        console.error(`[Weather] Error fetching live AI assistance:`, err.message);
+      }
+    }
 
     // Override the advisory anomaly with OWM historical data calculations if percentWetter is high
     let advisory = aiData.advisory;
     if (percentWetter > 15) {
       advisory = `This week is running ${percentWetter}% wetter than ${name}'s five-year average — pack a rain shell and build buffer into outdoor plans.`;
-    }
-
-    let places = DEFAULT_PLACES;
-
-    if (aiData.places && Array.isArray(aiData.places) && aiData.places.length > 0) {
-      try {
-        places = await Promise.all(
-          aiData.places.map(async (p: any) => {
-            const attractionName = p.name || 'Local Attraction';
-            const attractionKey = attractionName.toLowerCase().trim();
-            let imgUrl = '';
-              // Check in-memory and Redis cache first
-            if (wikiImageCache.has(attractionKey)) {
-              imgUrl = wikiImageCache.get(attractionKey) || '';
-            } else {
-              try {
-                const cachedImg = await getCache(`wiki-img:${attractionKey}`);
-                if (cachedImg) {
-                  imgUrl = cachedImg;
-                  wikiImageCache.set(attractionKey, imgUrl);
-                }
-              } catch (cacheErr: any) {
-                console.warn(`[Places Image Cache] Redis read failed for "${attractionName}":`, cacheErr.message);
-              }
-            }
-
-            if (!imgUrl) {
-              // 1. Try fetching from Wikipedia using dynamic Search first
-              try {
-                const locationContext = (country && typeof country === 'string') ? country : name;
-                const query = `${attractionName}, ${locationContext}`;
-                const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=&format=json&origin=*`;
-                const searchRes = await axios.get(searchUrl, {
-                  headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
-                  timeout: 1000 // 1s timeout
-                });
-                const searchResults = searchRes.data?.query?.search;
-                
-                if (searchResults && searchResults.length > 0) {
-                  let pageTitle = '';
-                  for (const item of searchResults) {
-                    const title = item.title;
-                    
-                    // Skip if the page title is exactly the geocoded city name or country name (generic city pages)
-                    if (
-                      title.toLowerCase().trim() === name.toLowerCase().trim() || 
-                      title.toLowerCase().trim() === country.toLowerCase().trim()
-                    ) {
-                      continue;
-                    }
-                    
-                    // Heuristic: Ensure the page title shares at least one meaningful word with the attraction name
-                    const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
-                    const attractionWords = normalize(attractionName).filter(w => w !== name.toLowerCase() && w !== country.toLowerCase() && w.length > 2);
-                    const titleWords = normalize(title);
-                    const hasKeywordMatch = attractionWords.length === 0 || attractionWords.some(w => titleWords.includes(w));
-                    
-                    if (hasKeywordMatch) {
-                      pageTitle = title;
-                      break;
-                    }
-                  }
-
-                  if (pageTitle) {
-                    const imgInfoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
-                    const imgInfoRes = await axios.get(imgInfoUrl, {
-                      headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
-                      timeout: 1000 // 1s timeout
-                    });
-                    const pages = imgInfoRes.data?.query?.pages;
-                    if (pages) {
-                      const pageId = Object.keys(pages)[0];
-                      if (pageId && pages[pageId]?.thumbnail?.source) {
-                        imgUrl = pages[pageId].thumbnail.source;
-                        console.log(`[Wikipedia Search] Successfully matched image for "${attractionName}" via "${pageTitle}": ${imgUrl}`);
-                      }
-                    }
-                  }
-                }
-              } catch (err: any) {
-                console.warn(`[Wikipedia Search Image API] Failed for "${attractionName}":`, err.message);
-              }
-            }
-
-            if (!imgUrl) {
-              // 2. Fallback to Wikimedia Commons search if Wikipedia search had no image
-              try {
-                const locationContext = (country && typeof country === 'string') ? country : name;
-                const query = `${attractionName}, ${locationContext}`;
-                const commonsUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`;
-                const commonsRes = await axios.get(commonsUrl, {
-                  headers: { 'User-Agent': 'WeatherWiseAI/1.0 (contact@weathermind.com)' },
-                  timeout: 1000 // 1s timeout
-                });
-                const pages = commonsRes.data?.query?.pages;
-                if (pages) {
-                  const firstPageId = Object.keys(pages)[0];
-                  const imgInfo = pages[firstPageId]?.imageinfo?.[0];
-                  if (imgInfo?.thumburl) {
-                    imgUrl = imgInfo.thumburl;
-                  } else if (imgInfo?.url) {
-                    imgUrl = imgInfo.url;
-                  }
-                }
-              } catch (err: any) {
-                console.warn(`[Wikimedia Commons API] Failed for "${attractionName}":`, err.message);
-              }
-            }
-
-            // Save to in-memory cache and Redis if we resolved a valid Wikimedia/Wikipedia URL
-            if (imgUrl && !imgUrl.includes("unsplash.com")) {
-              wikiImageCache.set(attractionKey, imgUrl);
-              try {
-                await setCache(`wiki-img:${attractionKey}`, imgUrl, 86400 * 7); // Cache for 7 days
-              } catch (cacheErr: any) {
-                console.warn(`[Places Image Cache] Redis write failed for "${attractionName}":`, cacheErr.message);
-              }
-            }
-
-            // 3. Fallback to generic category-based photo if all else fails
-            if (!imgUrl) {
-              const cat = (p.category || 'city').toLowerCase().trim();
-              imgUrl = CATEGORY_IMAGES[cat] || CATEGORY_IMAGES.city;
-            }
-
-            return {
-              name: attractionName,
-              image: imgUrl,
-              desc: p.desc || 'A scenic local destination worth visiting.'
-            };
-          })
-        );
-      } catch (err: any) {
-        console.error('[Places Image Resolution] Error mapping place data:', err.message);
-      }
     }
 
     return {
@@ -720,12 +735,13 @@ export async function getWeatherData(cityName: string): Promise<CityData> {
       sunset: sunsetTime,
       timeZone,
       timeZoneLabel,
-      advisory,
+      advisory: skipAI ? (percentWetter > 15 ? advisory : "Analyzing weather anomalies...") : advisory,
       skyType: mainSkyType,
       forecast: forecastArray,
-      packingNote: aiData.packingNote,
-      healthNote: `AQI ${aqiValue} (${aqiText}). ` + aiData.healthNote,
-      places
+      packingNote: skipAI ? "Analyzing packing recommendations..." : aiData.packingNote,
+      healthNote: `AQI ${aqiValue} (${aqiText}). ` + (skipAI ? "Analyzing health advisory..." : aiData.healthNote),
+      places: skipAI ? [] : places,
+      isAiPlaceholder: skipAI
     };
   } catch (err: any) {
     if (err.message && err.message.includes('not found')) {

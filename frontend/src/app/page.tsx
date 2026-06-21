@@ -35,6 +35,7 @@ interface CityData {
     image: string;
     desc: string;
   }[];
+  isAiPlaceholder?: boolean;
 }
 
 interface HistoricalQuery {
@@ -839,6 +840,7 @@ export default function Home() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [localTime, setLocalTime] = useState("—");
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   
   // Trip management state
@@ -1078,12 +1080,41 @@ export default function Home() {
     }
   };
 
+  const fetchAIAssistance = async (cityName: string) => {
+    setIsLoadingAI(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/weather/ai?city=${encodeURIComponent(cityName)}`);
+      if (res.ok) {
+        const fullData = await res.json();
+        // Make sure the user hasn't switched to another city in the meantime
+        setSelectedCity(prev => {
+          if (prev.city.toLowerCase().trim() === cityName.toLowerCase().trim()) {
+            return {
+              ...prev,
+              advisory: fullData.advisory,
+              packingNote: fullData.packingNote,
+              healthNote: fullData.healthNote,
+              places: fullData.places,
+              isAiPlaceholder: false
+            };
+          }
+          return prev;
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to fetch AI details asynchronously:", err);
+    } finally {
+      setIsLoadingAI(false);
+    }
+  };
+
   // Perform search submit
   const handleSearchSubmit = async (cityName: string) => {
     if (!cityName) return;
     const key = cityName.toLowerCase().trim();
     setGlobalError(null);
     setIsLoadingWeather(true);
+    setIsLoadingAI(false);
     
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     const startTime = Date.now();
@@ -1097,6 +1128,9 @@ export default function Home() {
           setSelectedCity(data);
           setSearchQuery(data.city);
           setShowSuggestions(false);
+          if (data.isAiPlaceholder) {
+            fetchAIAssistance(data.city);
+          }
           return;
         } else {
           // If the backend returned a non-OK status, try to extract error message
@@ -1942,8 +1976,10 @@ export default function Home() {
           <span className="flex-shrink-0 text-gold" aria-hidden="true">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </span>
-          <p className="font-body text-[0.88rem] text-paper/85 leading-normal">
-            {selectedCity.advisory.includes("Istanbul") ? (
+          <p className="font-body text-[0.88rem] text-paper/85 leading-normal flex-1">
+            {isLoadingAI ? (
+              <span className="inline-block h-3.5 bg-paper/20 rounded-[4px] w-[220px] animate-pulse align-middle" />
+            ) : selectedCity.advisory.includes("Istanbul") ? (
               <>This week is running <strong className="text-gold font-semibold">40% wetter</strong> than Istanbul&apos;s five-year average — pack a rain shell and build buffer into outdoor plans for Friday and Saturday.</>
             ) : (
               selectedCity.advisory
@@ -2159,9 +2195,16 @@ export default function Home() {
                   <span className="w-[7px] h-[7px] rounded-full bg-[#5BA876] flex-shrink-0" aria-hidden="true"></span>
                   Packing note
                 </div>
-                <p className="font-body text-[0.92rem] text-ink leading-relaxed">
-                  {selectedCity.packingNote}
-                </p>
+                {isLoadingAI ? (
+                  <div className="space-y-2 py-1">
+                    <div className="h-3.5 bg-slate/15 dark:bg-white/10 rounded-md w-full animate-pulse" />
+                    <div className="h-3.5 bg-slate/15 dark:bg-white/10 rounded-md w-4/5 animate-pulse" />
+                  </div>
+                ) : (
+                  <p className="font-body text-[0.92rem] text-ink leading-relaxed">
+                    {selectedCity.packingNote}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2171,9 +2214,16 @@ export default function Home() {
                   <span className="w-[7px] h-[7px] rounded-full bg-[#5BA876] flex-shrink-0" aria-hidden="true"></span>
                   Air quality &amp; health
                 </div>
-                <p className="font-body text-[0.92rem] text-ink leading-relaxed">
-                  {selectedCity.healthNote}
-                </p>
+                {isLoadingAI ? (
+                  <div className="space-y-2 py-1">
+                    <div className="h-3.5 bg-slate/15 dark:bg-white/10 rounded-md w-full animate-pulse" />
+                    <div className="h-3.5 bg-slate/15 dark:bg-white/10 rounded-md w-2/3 animate-pulse" />
+                  </div>
+                ) : (
+                  <p className="font-body text-[0.92rem] text-ink leading-relaxed">
+                    {selectedCity.healthNote}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2246,7 +2296,27 @@ export default function Home() {
             </div>
           </div>
 
-          {getRankedPlaces().length === 0 ? (
+          {isLoadingAI ? (
+            <div className="flex flex-wrap justify-center gap-6">
+              {[1, 2, 3].map((n) => (
+                <div
+                  key={n}
+                  className="w-full md:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] bg-white/60 backdrop-blur-lg border border-white/30 rounded-[20px] overflow-hidden flex flex-col justify-between shadow-[0_4px_20px_rgba(0,0,0,0.015)]"
+                >
+                  <div className="relative w-full aspect-[16/10] bg-slate/15 dark:bg-white/10 animate-pulse" />
+                  <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <div className="h-4 bg-slate/15 dark:bg-white/10 rounded-md w-3/4 animate-pulse" />
+                      <div className="h-2.5 bg-slate/10 dark:bg-white/5 rounded-md w-1/3 animate-pulse" />
+                      <div className="h-3 bg-slate/15 dark:bg-white/10 rounded-md w-full animate-pulse" />
+                      <div className="h-3 bg-slate/15 dark:bg-white/10 rounded-md w-5/6 animate-pulse" />
+                    </div>
+                    <div className="h-9 bg-slate/15 dark:bg-white/10 rounded-xl w-full animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : getRankedPlaces().length === 0 ? (
             <div className="text-center py-14 bg-white/40 backdrop-blur-lg border border-white/20 rounded-[24px] shadow-[0_4px_20px_rgba(0,0,0,0.015)]">
               <span className="text-3xl block mb-2" role="img" aria-label="pin">📍</span>
               <p className="font-body text-[0.92rem] text-slate font-medium">No major tourist attractions found for this location.</p>

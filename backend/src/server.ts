@@ -57,16 +57,16 @@ app.get('/api/weather', async (req: Request, res: Response): Promise<void> => {
   
   try {
     // Check cache first
-    const cachedData = await getCache(cacheKey);
+    const cachedData: any = await getCache(cacheKey);
     if (cachedData) {
       console.log(`[Cache] Served weather data for: ${city}`);
       res.json(cachedData);
       return;
     }
 
-    // Cache miss, fetch live OWM + Open-Meteo + Gemini data
-    console.log(`[Cache Miss] Fetching weather data for: ${city}`);
-    const weatherData = await getWeatherData(city);
+    // Cache miss, fetch weather data, skipping AI on the initial query for maximum performance
+    console.log(`[Cache Miss] Fetching weather data (skipping AI initially) for: ${city}`);
+    const weatherData = await getWeatherData(city, true);
     
     // Save to cache (TTL: 30 minutes = 1800 seconds)
     await setCache(cacheKey, weatherData, 1800);
@@ -76,6 +76,39 @@ app.get('/api/weather', async (req: Request, res: Response): Promise<void> => {
     console.error(`Error in /api/weather:`, error.message);
     const status = error.message.includes('not found') ? 404 : 500;
     res.status(status).json({ error: error.message || 'Failed to fetch weather information' });
+  }
+});
+
+// GET /api/weather/ai (Fetch AI advisory, packing notes, and recommendations in background)
+app.get('/api/weather/ai', async (req: Request, res: Response): Promise<void> => {
+  const city = req.query.city as string;
+  if (!city) {
+    res.status(400).json({ error: 'City query parameter is required' });
+    return;
+  }
+
+  const cacheKey = `weather:${city.toLowerCase().trim()}`;
+
+  try {
+    // Check cache first. If it's already there and is NOT a placeholder, return it!
+    const cachedData: any = await getCache(cacheKey);
+    if (cachedData && !cachedData.isAiPlaceholder) {
+      console.log(`[Cache] Served full AI data for: ${city}`);
+      res.json(cachedData);
+      return;
+    }
+
+    // If cache has placeholder or is empty, we must fetch with skipAI = false
+    console.log(`[AI Fetch] Fetching full AI data for: ${city}`);
+    const fullWeatherData = await getWeatherData(city, false);
+
+    // Save full weather data to cache (TTL: 30 minutes)
+    await setCache(cacheKey, fullWeatherData, 1800);
+
+    res.json(fullWeatherData);
+  } catch (error: any) {
+    console.error(`Error in /api/weather/ai:`, error.message);
+    res.status(500).json({ error: error.message || 'Failed to fetch AI travel details' });
   }
 });
 
