@@ -504,7 +504,13 @@ const WeatherScene: React.FC<WeatherSceneProps> = ({
     // Moon phase: calculate based on day of month (approximate lunar phase)
     const dayOfMonth = new Date().getDate();
     const phaseIndex = dayOfMonth % 4; // 0: crescent, 1: half, 2: gibbous, 3: full
-    const maskCx = phaseIndex === 0 ? 34 : phaseIndex === 1 ? 50 : phaseIndex === 2 ? 66 : 120;
+    
+    // Correct shadow offsets for a beautiful transition:
+    // 72: leaves a thin illuminated crescent
+    // 95: leaves exactly half the moon illuminated
+    // 115: leaves a wider gibbous moon illuminated
+    // 160: fully illuminates the moon (full moon)
+    const maskCx = phaseIndex === 0 ? 72 : phaseIndex === 1 ? 95 : phaseIndex === 2 ? 115 : 160;
 
     return { x, y, maskCx };
   }, [localHour]);
