@@ -781,9 +781,9 @@ const WeatherScene: React.FC<WeatherSceneProps> = ({
               </mask>
             </defs>
             <circle cx="50" cy="50" r="45" fill="#E5E9F0" mask="url(#moon-mask)" />
-            <circle cx="35" cy="30" r="7" fill="#D8DEE9" opacity="0.4" />
-            <circle cx="65" cy="55" r="9" fill="#D8DEE9" opacity="0.4" />
-            <circle cx="45" cy="68" r="5" fill="#D8DEE9" opacity="0.4" />
+            <circle cx="35" cy="30" r="7" fill="#D8DEE9" opacity="0.4" mask="url(#moon-mask)" />
+            <circle cx="65" cy="55" r="9" fill="#D8DEE9" opacity="0.4" mask="url(#moon-mask)" />
+            <circle cx="45" cy="68" r="5" fill="#D8DEE9" opacity="0.4" mask="url(#moon-mask)" />
           </svg>
         </div>
       )}
