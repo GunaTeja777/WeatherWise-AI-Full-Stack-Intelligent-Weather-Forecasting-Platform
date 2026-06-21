@@ -354,6 +354,73 @@ app.get('/api/trips/export/pdf', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/trips/export/json (Export itinerary to JSON)
+app.get('/api/trips/export/json', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const trips = await prisma.trip.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    const jsonData = JSON.stringify(trips, null, 2);
+    
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Content-Disposition': 'attachment; filename=weathermind_trips.json',
+      'Content-Length': Buffer.byteLength(jsonData)
+    });
+    res.end(jsonData);
+  } catch (error: any) {
+    console.error(`Error exporting JSON:`, error.message);
+    res.status(500).json({ error: 'Failed to generate JSON export' });
+  }
+});
+
+// GET /api/trips/export/csv (Export itinerary to CSV)
+app.get('/api/trips/export/csv', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const trips = await prisma.trip.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Helper to escape CSV fields
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '';
+      let str = typeof val === 'string' ? val : String(val);
+      str = str.replace(/"/g, '""');
+      if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+        return `"${str}"`;
+      }
+      return str;
+    };
+
+    const headers = ['ID', 'City', 'Country', 'Dates', 'Temperature Snapshot', 'Info', 'Created At'];
+    const rows = trips.map(t => [
+      t.id,
+      t.city,
+      t.country,
+      t.dates,
+      t.tempSnapshot,
+      t.info,
+      t.createdAt
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\r\n');
+
+    res.writeHead(200, {
+      'Content-Type': 'text/csv',
+      'Content-Disposition': 'attachment; filename=weathermind_trips.csv',
+      'Content-Length': Buffer.byteLength(csvContent)
+    });
+    res.end(csvContent);
+  } catch (error: any) {
+    console.error(`Error exporting CSV:`, error.message);
+    res.status(500).json({ error: 'Failed to generate CSV export' });
+  }
+});
+
 // 2. GET /api/trips (CRUD - Read)
 app.get('/api/trips', async (req: Request, res: Response) => {
   try {
